@@ -1,6 +1,7 @@
 # coldmaps
 
 A tool for creating heatmaps from Team Fortress 2 demos
+![Screenshot](/screenshot.png)
 
 # Download
 

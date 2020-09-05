@@ -1,0 +1,25 @@
+[package]
+name = "coldmaps"
+version = "0.1.0"
+authors = ["Tails8521 <tails8521@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+tf-demo-parser = { git = "https://github.com/demostf/parser", rev = "e196b7bfcc3a8b2d24d95f92f9f5660d377cfff0" }
+serde = { version = "=1.0.114", features = ["derive"] }
+serde_json = "=1.0.56"
+serde_repr = "=0.1.6"
+num_enum = "=0.5.0"
+image = "=0.23.8"
+palette = "=0.5"
+# iced = { version = "=0.1.1", features = ["debug"] }
+iced = { git = "https://github.com/hecrj/iced.git", features = ["image", "tokio"], rev = "ff15ebc54778dee2a7262469c8a2bcd5abecd4d1" }
+# iced_native = "=0.2.2"
+iced_native = { git = "https://github.com/hecrj/iced.git", rev = "ff15ebc54778dee2a7262469c8a2bcd5abecd4d1"}
+tokio = { version = "0.2", features = ["blocking"] }
+rayon = "1.4.0"
+nfd2 = "=0.2.1"
+
+# [profile.release]
+# lto = true
+# codegen-units = 1

@@ -713,7 +713,11 @@ impl Application for App {
                 return Command::perform(open_save_dialog(), Message::ImageNameSelected);
             }
             Message::ImageNameSelected(path) => {
-                if let Some(path) = path {
+                if let Some(mut path) = path {
+                    if path.extension().is_none() {
+                        self.log("File extension not specified, defaulting to png");
+                        path.set_extension("png");
+                    }
                     match &self.get_preview_pane().heatmap_image {
                         Some(heatmap_image) => {
                             if let Err(err) = heatmap_image.image_with_heatmap_overlay.save(&path) {

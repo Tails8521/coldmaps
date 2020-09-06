@@ -1,7 +1,7 @@
 use coldmaps::*;
 mod style;
 
-use heatmap::CoordsType;
+use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::Death;
 use iced::{
     button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application,
@@ -74,6 +74,7 @@ enum Message {
     DemoRemoved(usize),
     ThemeChanged(style::Theme),
     CoordsTypeChanged(CoordsType),
+    HeatmapTypeChanged(HeatmapType),
     XPosInputChanged(String),
     YPosInputChanged(String),
     ScaleInputChanged(String),
@@ -246,6 +247,7 @@ struct SettingsPane {
     demos_need_processing: bool, // has the current list not been processed?
     image_ready: bool,
     coords_type: CoordsType,
+    heatmap_type: HeatmapType,
 }
 
 impl SettingsPane {
@@ -285,6 +287,22 @@ impl SettingsPane {
                 )
             },
         );
+        let choose_heatmap_type = [HeatmapType::VictimPosition, HeatmapType::KillerPosition]
+            .iter()
+            .fold(
+                Column::new().spacing(10).push(Text::new("Heatmap type:")),
+                |column, heatmap_type| {
+                    column.push(
+                        Radio::new(
+                            *heatmap_type,
+                            &format!("{}", heatmap_type),
+                            Some(self.heatmap_type),
+                            Message::HeatmapTypeChanged,
+                        )
+                        .style(self.theme),
+                    )
+                },
+            );
 
         let x_pos_input = TextInput::new(
             &mut self.x_pos_input_state,
@@ -376,6 +394,7 @@ impl SettingsPane {
             CoordsType::Console => "Camera coordinates (use the console)",
         };
         let settings_content: Element<_> = Column::new()
+            .push(choose_heatmap_type)
             .push(Text::new(coords_label))
             .push(x_pos_border)
             .push(y_pos_border)
@@ -605,6 +624,9 @@ impl Application for App {
             Message::CoordsTypeChanged(coords_type) => {
                 self.get_settings_pane().coords_type = coords_type;
             }
+            Message::HeatmapTypeChanged(heatmap_type) => {
+                self.get_settings_pane().heatmap_type = heatmap_type;
+            }
             Message::XPosInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.x_pos = input.parse().ok();
@@ -667,6 +689,7 @@ impl Application for App {
                 let pos_y = settings_pane.y_pos.unwrap();
                 let scale = settings_pane.scale.unwrap();
                 let coords_type = settings_pane.coords_type;
+                let heatmap_type = settings_pane.heatmap_type;
                 let preview_pane = self.get_preview_pane();
                 let image = match &preview_pane.heatmap_image {
                     Some(image) => image.image.clone(),
@@ -676,6 +699,7 @@ impl Application for App {
                 let screen_height = image.height();
                 return Command::perform(
                     generate_heatmap_async(
+                        heatmap_type,
                         deaths,
                         image,
                         screen_width,
@@ -689,11 +713,12 @@ impl Application for App {
                 );
             }
             Message::HeatmapGenerationDone(heatmap_generation_output) => {
+                let heatmap_type = self.get_settings_pane().heatmap_type;
                 match heatmap_generation_output.result {
                     Ok(image) => {
                         self.log(&format!(
-                            "Heatmap generated in {:.2}s",
-                            heatmap_generation_output.time_elapsed
+                            "{} heatmap generated in {:.2}s",
+                            heatmap_type, heatmap_generation_output.time_elapsed
                         ));
                         match &mut self.get_preview_pane().heatmap_image {
                             Some(heatmap_image) => {
@@ -857,6 +882,7 @@ async fn process_demos_async<'a>(input_paths: Vec<PathBuf>) -> DemoProcessingOut
 }
 
 async fn generate_heatmap_async(
+    heatmap_type: HeatmapType,
     deaths: Vec<Death>,
     image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     screen_width: u32,
@@ -869,6 +895,7 @@ async fn generate_heatmap_async(
     let chrono = Instant::now();
     let result = tokio::task::spawn_blocking(move || {
         coldmaps::generate_heatmap(
+            heatmap_type,
             deaths,
             image,
             screen_width,

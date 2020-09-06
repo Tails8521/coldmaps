@@ -5,7 +5,7 @@ A tool for creating heatmaps from Team Fortress 2 demos
 
 # Download
 
-Check the [releases page](https://github.com/Tails8521/coldmaps/releases) and download the latest version, the .exe is under Assets
+Check the [releases page](https://github.com/Tails8521/coldmaps/releases) and download the latest version
 
 # How to use
 
@@ -16,7 +16,7 @@ Tip: You can use setpos \<x> \<y> \<z> to position yourself accurately
 4: Drag and drop the demo(s) you want to use for the heatmap  
 5: Fill the camera coordinates and zoom level, don't forget to tick the checkbox corresponding to what type of coordinates you used (cl_showpos or the console)  
 6: Click on the "Process demos" button to begin the demo analysis, once it has completed, you can click on the "Generate heatmap" and the heatmap should appear in the preview pane  
-7: The "Export image" button lets you export the heatmap as an image file, don't forget to specify the file extension in the file name you save as (don't type "my heatmap" but rather "my heatmap.png")
+7: The "Export image" button lets you export the heatmap as an image file
 
 # How to build
 

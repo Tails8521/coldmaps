@@ -6,7 +6,7 @@ use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
 use std::{fs, mem, path::PathBuf, rc::Rc};
 
-use heatmap::CoordsType;
+use heatmap::{CoordsType, HeatmapType};
 use tf_demo_parser::{Demo, DemoParser};
 
 pub fn process_demos(input_paths: Vec<PathBuf>) -> (Vec<Death>, Vec<String>) {
@@ -49,6 +49,7 @@ pub fn process_demos(input_paths: Vec<PathBuf>) -> (Vec<Death>, Vec<String>) {
 }
 
 pub fn generate_heatmap(
+    heatmap_type: HeatmapType,
     deaths: Vec<Death>,
     mut image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     screen_width: u32,
@@ -66,6 +67,6 @@ pub fn generate_heatmap(
         scale,
         coords_type,
     );
-    heatmap_generator.generate_heatmap(deaths.iter(), &mut image);
+    heatmap_generator.generate_heatmap(heatmap_type, deaths.iter(), &mut image);
     image
 }

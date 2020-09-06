@@ -26,6 +26,27 @@ impl Display for CoordsType {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum HeatmapType {
+    VictimPosition,
+    KillerPosition,
+}
+
+impl Default for HeatmapType {
+    fn default() -> Self {
+        Self::VictimPosition
+    }
+}
+
+impl Display for HeatmapType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeatmapType::VictimPosition => write!(f, "Victim position"),
+            HeatmapType::KillerPosition => write!(f, "Killer position"),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct HeatMapParameters {
     screen_width: f32,
@@ -79,6 +100,7 @@ impl HeatMapGenerator {
 
     pub fn generate_heatmap<'a>(
         &self,
+        heatmap_type: HeatmapType,
         deaths: impl IntoIterator<Item = &'a Death>,
         image: &mut ImageBuffer<Rgb<u8>, Vec<u8>>,
     ) {
@@ -96,7 +118,11 @@ impl HeatMapGenerator {
             // LinSrgba::new(1.0, 1.0, 1.0, 1.0),
         ]);
         for death in deaths {
-            if let Some(entity_state) = &death.victim_entity_state {
+            let entity_state = match heatmap_type {
+                HeatmapType::VictimPosition => &death.victim_entity_state,
+                HeatmapType::KillerPosition => &death.killer_entity_state,
+            };
+            if let Some(entity_state) = entity_state {
                 let game_coords = entity_state.position;
                 let (x_f, y_f) = self.game_coords_to_screen_coords(game_coords.x, game_coords.y);
                 let x_i = x_f.round() as i32;

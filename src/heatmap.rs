@@ -107,7 +107,7 @@ impl HeatMapGenerator {
         let nb_pixels = (image.width() * image.height()) as usize;
         let mut intensities = Vec::with_capacity(nb_pixels);
         intensities.resize_with(nb_pixels, || 0.0);
-        let mut max_intensity = 0.0;
+        let mut max_intensity = f32::NEG_INFINITY;
         let gradient = Gradient::new(vec![
             // LinSrgba::new(0.0, 0.0, 0.0, 0.0),
             LinSrgba::new(0.0, 0.0, 1.0, 0.0),

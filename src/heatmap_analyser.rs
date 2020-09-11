@@ -290,7 +290,7 @@ impl Round {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct World {
     boundary_min: Vector,
     boundary_max: Vector,
@@ -628,7 +628,7 @@ impl HeatmapAnalyser {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HeatmapAnalysis {
     pub chat: Vec<ChatMassage>,

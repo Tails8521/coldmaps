@@ -2,7 +2,7 @@ use coldmaps::*;
 mod style;
 
 use heatmap::{CoordsType, HeatmapType};
-use heatmap_analyser::Death;
+use heatmap_analyser::HeatmapAnalysis;
 use iced::{
     button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application,
     Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image, Length, Point,
@@ -10,7 +10,7 @@ use iced::{
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb};
 use pane_grid::{Axis, Pane};
-use std::{path::PathBuf, time::Instant};
+use std::{mem, path::PathBuf, time::Instant};
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
@@ -45,7 +45,8 @@ pub fn main() {
 struct App {
     pane_grid_state: pane_grid::State<PaneState>,
     theme: style::Theme,
-    busy: bool,
+    busy: bool, // TODO visual indicator?
+    dropped_files: Vec<PathBuf>,
     demos_pane: Pane,
     filters_pane: Pane,
     settings_pane: Pane,
@@ -65,6 +66,7 @@ struct DemoFile {
     path: PathBuf,
     file_name: String,
     delete_button: button::State,
+    heatmap_analysis: HeatmapAnalysis,
 }
 
 #[derive(Debug, Clone)]
@@ -78,23 +80,15 @@ enum Message {
     XPosInputChanged(String),
     YPosInputChanged(String),
     ScaleInputChanged(String),
-    ProcessDemosPressed,
-    ProcessDemosDone(DemoProcessingOutput),
-    GenerateHeatmapPressed,
-    HeatmapGenerationDone(HeatmapGenerationOutput),
+    ProcessDemosDone(TimedResult<Vec<DemoProcessingOutput>>),
     ExportImagePressed,
     ImageNameSelected(Option<PathBuf>),
+    EndOfDemoFilesDrop(()),
 }
 
 #[derive(Debug, Clone)]
-struct DemoProcessingOutput {
-    result: (Vec<Death>, Vec<String>),
-    time_elapsed: f32,
-}
-
-#[derive(Debug, Clone)]
-struct HeatmapGenerationOutput {
-    result: Result<ImageBuffer<Rgb<u8>, Vec<u8>>, String>,
+struct TimedResult<T: std::fmt::Debug + Clone> {
+    result: T,
     time_elapsed: f32,
 }
 
@@ -142,17 +136,14 @@ impl DemoList {
             )
         } else {
             let theme = self.theme;
-            let busy = self.busy;
             (
                 self.demo_files
                     .iter_mut()
                     .enumerate()
                     .fold(Column::new().spacing(10), |column, (index, demo)| {
-                        let mut delete_button =
-                            Button::new(&mut demo.delete_button, delete_icon()).style(theme);
-                        if !busy {
-                            delete_button = delete_button.on_press(Message::DemoRemoved(index));
-                        }
+                        let delete_button = Button::new(&mut demo.delete_button, delete_icon())
+                            .style(theme)
+                            .on_press(Message::DemoRemoved(index));
                         let row = Row::new()
                             .push(delete_button)
                             .push(Text::new(&demo.file_name).size(20));
@@ -229,7 +220,6 @@ impl FiltersPane {
 struct SettingsPane {
     theme: style::Theme,
     busy: bool,
-    deaths: Vec<Death>,
     scroll_state: scrollable::State,
     x_pos_input_state: text_input::State,
     x_pos_input: String,
@@ -240,11 +230,7 @@ struct SettingsPane {
     scale_input_state: text_input::State,
     scale_input: String,
     scale: Option<f32>,
-    process_demos_button: button::State,
-    generate_heatmap_button: button::State,
     export_image_button: button::State,
-    demo_list_ready: bool,       // is there at least 1 demo in the list?
-    demos_need_processing: bool, // has the current list not been processed?
     image_ready: bool,
     coords_type: CoordsType,
     heatmap_type: HeatmapType,
@@ -354,32 +340,6 @@ impl SettingsPane {
             .padding(3)
             .width(Length::Fill)
             .style(scale_style);
-
-        let mut process_demos_button =
-            Button::new(&mut self.process_demos_button, Text::new("Process demos"))
-                .padding(10)
-                .style(self.theme)
-                .width(Length::Fill);
-        if self.demo_list_ready && self.demos_need_processing && !self.busy {
-            process_demos_button = process_demos_button.on_press(Message::ProcessDemosPressed);
-        }
-        let mut generate_heatmap_button = Button::new(
-            &mut self.generate_heatmap_button,
-            Text::new("Generate heatmap"),
-        )
-        .padding(10)
-        .style(self.theme)
-        .width(Length::Fill);
-        if self.x_pos.is_some()
-            && self.y_pos.is_some()
-            && self.scale.is_some()
-            && self.image_ready
-            && !self.deaths.is_empty()
-            && !self.busy
-        {
-            generate_heatmap_button =
-                generate_heatmap_button.on_press(Message::GenerateHeatmapPressed);
-        }
         let mut export_image_button =
             Button::new(&mut self.export_image_button, Text::new("Export image"))
                 .padding(10)
@@ -400,8 +360,6 @@ impl SettingsPane {
             .push(y_pos_border)
             .push(Text::new("cl_leveloverview scale"))
             .push(scale_border)
-            .push(process_demos_button)
-            .push(generate_heatmap_button)
             .push(export_image_button)
             .push(choose_coords_type)
             .push(choose_theme)
@@ -548,6 +506,7 @@ impl Application for App {
         (
             App {
                 busy: false,
+                dropped_files: Default::default(),
                 pane_grid_state,
                 theme: Default::default(),
                 demos_pane,
@@ -568,21 +527,15 @@ impl Application for App {
         match message {
             Message::WindowEventOccurred(iced_native::Event::Window(
                 iced_native::window::Event::FileDropped(path),
-            )) if !self.busy => {
+            )) => {
                 if !path.is_file() {
                     return Command::none();
                 }
                 let file_name = path.file_name().unwrap().to_string_lossy().to_string(); // The path can't be .. at that point
                 let file_name_lowercase = file_name.to_lowercase();
                 if file_name_lowercase.ends_with(".dem") {
-                    self.get_demo_list_pane().demo_files.push(DemoFile {
-                        path,
-                        file_name,
-                        delete_button: Default::default(),
-                    });
-                    let setting_pane = self.get_settings_pane();
-                    setting_pane.demo_list_ready = true;
-                    setting_pane.demos_need_processing = true;
+                    self.dropped_files.push(path);
+                    return Command::perform(async {}, Message::EndOfDemoFilesDrop);
                 } else {
                     // try to load it as an image
                     if let Ok(reader) = Reader::open(&path) {
@@ -597,21 +550,43 @@ impl Application for App {
                                 _path: path,
                             });
                             self.get_settings_pane().image_ready = true;
+                            self.try_generate_heatmap();
                         }
                     }
                 }
             }
             Message::WindowEventOccurred(_) => {}
+            Message::EndOfDemoFilesDrop(_) => {
+                if !self.dropped_files.is_empty() {
+                    self.set_busy(true);
+                    let demo_count = self.dropped_files.len();
+                    self.log(&format!(
+                        "Processing {} demo{}...",
+                        demo_count,
+                        if demo_count > 1 { "s" } else { "" }
+                    ));
+                    let input_paths = mem::take(&mut self.dropped_files);
+                    return Command::perform(
+                        process_demos_async(input_paths),
+                        Message::ProcessDemosDone,
+                    );
+                }
+            }
             Message::PaneResized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.pane_grid_state.resize(&split, ratio);
             }
             Message::DemoRemoved(index) => {
                 let demo_list = self.get_demo_list_pane();
-                demo_list.demo_files.remove(index);
-                if demo_list.demo_files.is_empty() {
-                    self.get_settings_pane().demo_list_ready = false;
-                }
-                self.get_settings_pane().demos_need_processing = true;
+                let removed = demo_list.demo_files.remove(index);
+                let death_count = removed.heatmap_analysis.deaths.len();
+                self.log(&format!(
+                    "Removing {} with {} death{}",
+                    removed.file_name,
+                    death_count,
+                    if death_count > 1 { "s" } else { "" }
+                ));
+                self.show_stats();
+                self.try_generate_heatmap();
             }
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
@@ -623,115 +598,60 @@ impl Application for App {
             }
             Message::CoordsTypeChanged(coords_type) => {
                 self.get_settings_pane().coords_type = coords_type;
+                self.try_generate_heatmap();
             }
             Message::HeatmapTypeChanged(heatmap_type) => {
                 self.get_settings_pane().heatmap_type = heatmap_type;
+                self.try_generate_heatmap();
             }
             Message::XPosInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.x_pos = input.parse().ok();
                 settings_pane.x_pos_input = input;
+                self.try_generate_heatmap();
             }
             Message::YPosInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.y_pos = input.parse().ok();
                 settings_pane.y_pos_input = input;
+                self.try_generate_heatmap();
             }
             Message::ScaleInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.scale = input.parse().ok();
                 settings_pane.scale_input = input;
+                self.try_generate_heatmap();
             }
-            Message::ProcessDemosPressed => {
-                self.get_settings_pane().demos_need_processing = false;
-                self.set_busy(true);
-                let demo_count = self.get_demo_list_pane().demo_files.len();
-                self.log(&format!(
-                    "Processing {} demo{}...",
-                    demo_count,
-                    if demo_count > 1 { "s" } else { "" }
-                ));
-                return Command::perform(
-                    process_demos_async(
-                        self.get_demo_list_pane()
-                            .demo_files
-                            .iter()
-                            .map(|demo| demo.path.clone())
-                            .collect::<Vec<_>>(),
-                    ),
-                    Message::ProcessDemosDone,
-                );
-            }
-            Message::ProcessDemosDone(demo_processing_output) => {
+            Message::ProcessDemosDone(mut timed_result) => {
+                let mut demo_count = 0;
+                let mut death_count = 0;
                 let demo_list = self.get_demo_list_pane();
-                let demo_count = demo_list.demo_files.len();
-                let (deaths, errors) = demo_processing_output.result;
-                for error in errors {
-                    self.log(&error);
+                for demo in timed_result.result.iter_mut() {
+                    let demo = mem::take(demo);
+                    demo_count += 1;
+                    if let Some(heatmap_analysis) = demo.heatmap_analysis {
+                        death_count += heatmap_analysis.deaths.len();
+                        let path = demo.path;
+                        let file_name = path.file_name().unwrap().to_string_lossy().to_string();
+                        let demo_file = DemoFile {
+                            path,
+                            file_name,
+                            heatmap_analysis,
+                            delete_button: Default::default(),
+                        };
+                        demo_list.demo_files.push(demo_file);
+                    }
                 }
-                let death_count = deaths.len();
                 self.log(&format!(
                     "Loaded {} death{} from {} demo{} in {:.2}s",
                     death_count,
                     if death_count > 1 { "s" } else { "" },
                     demo_count,
                     if demo_count > 1 { "s" } else { "" },
-                    demo_processing_output.time_elapsed
+                    timed_result.time_elapsed
                 ));
-                self.get_settings_pane().deaths = deaths;
-                self.set_busy(false);
-            }
-            Message::GenerateHeatmapPressed => {
-                self.set_busy(true);
-                let settings_pane = self.get_settings_pane();
-                let deaths = settings_pane.deaths.clone();
-                let pos_x = settings_pane.x_pos.unwrap();
-                let pos_y = settings_pane.y_pos.unwrap();
-                let scale = settings_pane.scale.unwrap();
-                let coords_type = settings_pane.coords_type;
-                let heatmap_type = settings_pane.heatmap_type;
-                let preview_pane = self.get_preview_pane();
-                let image = match &preview_pane.heatmap_image {
-                    Some(image) => image.image.clone(),
-                    _ => unreachable!(),
-                };
-                let screen_width = image.width();
-                let screen_height = image.height();
-                return Command::perform(
-                    generate_heatmap_async(
-                        heatmap_type,
-                        deaths,
-                        image,
-                        screen_width,
-                        screen_height,
-                        pos_x,
-                        pos_y,
-                        scale,
-                        coords_type,
-                    ),
-                    Message::HeatmapGenerationDone,
-                );
-            }
-            Message::HeatmapGenerationDone(heatmap_generation_output) => {
-                let heatmap_type = self.get_settings_pane().heatmap_type;
-                match heatmap_generation_output.result {
-                    Ok(image) => {
-                        self.log(&format!(
-                            "{} heatmap generated in {:.2}s",
-                            heatmap_type, heatmap_generation_output.time_elapsed
-                        ));
-                        match &mut self.get_preview_pane().heatmap_image {
-                            Some(heatmap_image) => {
-                                heatmap_image.handle = image_to_handle(&image);
-                                heatmap_image.image_with_heatmap_overlay = image;
-                            }
-                            _ => unreachable!(),
-                        };
-                    }
-                    Err(err) => {
-                        self.log(&err);
-                    }
-                }
+                self.show_stats();
+                self.try_generate_heatmap();
                 self.set_busy(false);
             }
             Message::ExportImagePressed => {
@@ -842,6 +762,64 @@ impl App {
         // self.get_preview_pane().busy = busy;
         // self.get_log_pane().busy = busy;
     }
+    fn show_stats(&mut self) {
+        let demo_list = self.get_demo_list_pane();
+        let death_count: usize = demo_list
+            .demo_files
+            .iter()
+            .map(|demo_file| demo_file.heatmap_analysis.deaths.len())
+            .sum();
+        let demo_count = demo_list.demo_files.len();
+        self.log(&format!(
+            "Stats: {} death{}, {} demo{}",
+            death_count,
+            if death_count > 1 { "s" } else { "" },
+            demo_count,
+            if demo_count > 1 { "s" } else { "" },
+        ));
+    }
+    fn try_generate_heatmap(&mut self) {
+        let preview_pane = self.get_preview_pane();
+        let image = match &preview_pane.heatmap_image {
+            Some(image) => image.image.clone(),
+            None => return,
+        };
+        let settings_pane = self.get_settings_pane();
+        if let (Some(pos_x), Some(pos_y), Some(scale)) = (
+            settings_pane.x_pos,
+            settings_pane.y_pos,
+            settings_pane.scale,
+        ) {
+            let coords_type = settings_pane.coords_type;
+            let heatmap_type = settings_pane.heatmap_type;
+            let screen_width = image.width();
+            let screen_height = image.height();
+            let demo_list = self.get_demo_list_pane();
+            let deaths = demo_list
+                .demo_files
+                .iter()
+                .map(|demo_file| demo_file.heatmap_analysis.deaths.iter())
+                .flatten();
+            let heatmap_generation_output = coldmaps::generate_heatmap(
+                heatmap_type,
+                deaths,
+                image,
+                screen_width,
+                screen_height,
+                pos_x,
+                pos_y,
+                scale,
+                coords_type,
+            );
+            match &mut self.get_preview_pane().heatmap_image {
+                Some(heatmap_image) => {
+                    heatmap_image.handle = image_to_handle(&heatmap_generation_output);
+                    heatmap_image.image_with_heatmap_overlay = heatmap_generation_output;
+                }
+                _ => unreachable!(),
+            };
+        }
+    }
 }
 
 fn image_to_handle(image: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Handle {
@@ -865,51 +843,14 @@ fn image_to_handle(image: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Handle {
     )
 }
 
-async fn process_demos_async<'a>(input_paths: Vec<PathBuf>) -> DemoProcessingOutput {
+async fn process_demos_async<'a>(inputs: Vec<PathBuf>) -> TimedResult<Vec<DemoProcessingOutput>> {
     let chrono = Instant::now();
-    let output = tokio::task::spawn_blocking(move || coldmaps::process_demos(input_paths)).await;
+    let result = tokio::task::spawn_blocking(move || coldmaps::process_demos(inputs))
+        .await
+        .unwrap();
     let time_elapsed = chrono.elapsed().as_secs_f32();
-    match output {
-        Ok(result) => DemoProcessingOutput {
-            result,
-            time_elapsed,
-        },
-        Err(err) => DemoProcessingOutput {
-            result: (Vec::new(), vec![err.to_string()]),
-            time_elapsed,
-        },
-    }
-}
-
-async fn generate_heatmap_async(
-    heatmap_type: HeatmapType,
-    deaths: Vec<Death>,
-    image: ImageBuffer<Rgb<u8>, Vec<u8>>,
-    screen_width: u32,
-    screen_height: u32,
-    pos_x: f32,
-    pos_y: f32,
-    scale: f32,
-    coords_type: CoordsType,
-) -> HeatmapGenerationOutput {
-    let chrono = Instant::now();
-    let result = tokio::task::spawn_blocking(move || {
-        coldmaps::generate_heatmap(
-            heatmap_type,
-            deaths,
-            image,
-            screen_width,
-            screen_height,
-            pos_x,
-            pos_y,
-            scale,
-            coords_type,
-        )
-    })
-    .await;
-    let time_elapsed = chrono.elapsed().as_secs_f32();
-    HeatmapGenerationOutput {
-        result: result.map_err(|err| return err.to_string()),
+    TimedResult {
+        result,
         time_elapsed,
     }
 }

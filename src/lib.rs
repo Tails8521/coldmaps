@@ -1,56 +1,62 @@
 pub mod heatmap;
 pub mod heatmap_analyser;
 
-use heatmap_analyser::{Death, HeatmapAnalyser};
+use heatmap_analyser::{Death, HeatmapAnalyser, HeatmapAnalysis};
 use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
-use std::{fs, mem, path::PathBuf, rc::Rc};
+use std::{fs, path::PathBuf, rc::Rc};
 
 use heatmap::{CoordsType, HeatmapType};
 use tf_demo_parser::{Demo, DemoParser};
 
-pub fn process_demos(input_paths: Vec<PathBuf>) -> (Vec<Death>, Vec<String>) {
-    input_paths
+#[derive(Debug, Clone, Default)]
+pub struct DemoProcessingOutput {
+    pub path: PathBuf,
+    pub heatmap_analysis: Option<HeatmapAnalysis>,
+    pub error: Option<String>,
+}
+
+pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
+    inputs
         .par_iter()
         .map(|path| {
-            let mut errors = Vec::new();
-            let file = match fs::read(path) {
+            let file = match fs::read(&path) {
                 Ok(file) => file,
                 Err(err) => {
-                    errors.push(err.to_string());
-                    return (Vec::new(), errors);
+                    return DemoProcessingOutput {
+                        path: path.clone(),
+                        heatmap_analysis: None,
+                        error: Some(err.to_string()),
+                    }
                 }
             };
             let demo = Demo::new(file);
-            let state = Default::default();
-            if let Err(_err) = DemoParser::new_with_analyser(
+            let heatmap_analysis = Default::default();
+            let error = DemoParser::new_with_analyser(
                 demo.get_stream(),
-                HeatmapAnalyser::new(Rc::clone(&state)),
+                HeatmapAnalyser::new(Rc::clone(&heatmap_analysis)),
             )
             .parse()
-            {
-                errors.push(format!(
+            .map_err(|_err| {
+                format!(
                     "{}: Demo is corrupted, could only analyse up to tick {}",
                     path.to_string_lossy(),
-                    state.borrow().end_tick
-                ));
+                    heatmap_analysis.borrow().end_tick
+                )
+            })
+            .err();
+            DemoProcessingOutput {
+                path: path.clone(),
+                heatmap_analysis: Some(Rc::try_unwrap(heatmap_analysis).unwrap().into_inner()),
+                error,
             }
-            let deaths = mem::take(&mut state.borrow_mut().deaths);
-            (deaths, errors)
         })
-        .reduce(
-            || (Vec::new(), Vec::new()),
-            |mut a, mut b| {
-                a.0.append(&mut b.0);
-                a.1.append(&mut b.1);
-                a
-            },
-        )
+        .collect()
 }
 
-pub fn generate_heatmap(
+pub fn generate_heatmap<'a>(
     heatmap_type: HeatmapType,
-    deaths: Vec<Death>,
+    deaths: impl IntoIterator<Item = &'a Death>,
     mut image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     screen_width: u32,
     screen_height: u32,
@@ -67,6 +73,6 @@ pub fn generate_heatmap(
         scale,
         coords_type,
     );
-    heatmap_generator.generate_heatmap(heatmap_type, deaths.iter(), &mut image);
+    heatmap_generator.generate_heatmap(heatmap_type, deaths, &mut image);
     image
 }

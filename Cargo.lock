@@ -38,7 +38,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7f09f89872c2b6b29e319377b1fbe91c6f5947df19a25596e121cf19a7b35e"
 dependencies = [
  "bitflags",
- "line_drawing",
+ "line_drawing 0.7.0",
  "rusttype 0.7.9",
  "walkdir",
  "xdg",
@@ -57,7 +57,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0e60b75072ecd4168020818c0107f2857bb6c4e64252d8d3983f6263b40a5c3"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -107,7 +107,7 @@ checksum = "6007718437539bc4564d96742ad7a86adf1244b5fb6e0381b426034f957edb7f"
 dependencies = [
  "bitbuffer_derive",
  "memchr",
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -302,6 +302,7 @@ dependencies = [
  "iced",
  "iced_native",
  "image",
+ "line_drawing 0.8.0",
  "nfd2",
  "num_enum 0.5.0",
  "palette",
@@ -626,7 +627,7 @@ version = "0.20.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bb7ef65b3777a325d1eeefefab5b6d4959da54747e33bd6258e789640f307ad"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -1106,7 +1107,7 @@ source = "git+https://github.com/hecrj/iced.git?rev=ff15ebc54778dee2a7262469c8a2
 dependencies = [
  "iced_core",
  "iced_futures",
- "num-traits",
+ "num-traits 0.2.12",
  "twox-hash",
  "unicode-segmentation",
 ]
@@ -1128,7 +1129,7 @@ dependencies = [
  "iced_core",
  "iced_futures",
  "iced_style",
- "num-traits",
+ "num-traits 0.2.12",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1190,7 +1191,7 @@ dependencies = [
  "jpeg-decoder",
  "num-iter",
  "num-rational",
- "num-traits",
+ "num-traits 0.2.12",
  "png",
  "scoped_threadpool",
  "tiff",
@@ -1292,7 +1293,16 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc7ad3d82c845bdb5dde34ffdcc7a5fb4d2996e1e1ee0f19c33bc80e15196b9"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.12",
+]
+
+[[package]]
+name = "line_drawing"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81902e542483002b103c6424d23e765c2e5a65f732923299053a601bce50ab2"
+dependencies = [
+ "num-traits 0.1.43",
 ]
 
 [[package]]
@@ -1467,7 +1477,7 @@ dependencies = [
  "bitflags",
  "fxhash",
  "log",
- "num-traits",
+ "num-traits 0.2.12",
  "spirv_headers",
  "thiserror",
 ]
@@ -1578,7 +1588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d59457e662d541ba17869cf51cf177c0b5f0cbf476c66bdc90bf1edac4f875b"
 dependencies = [
  "autocfg",
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -1589,7 +1599,7 @@ checksum = "7a6e6b7c748f995c4c29c5f5ae0248536e04a5739927c74ec0fa564805094b9f"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -1600,7 +1610,16 @@ checksum = "a5b4d7360f362cfb50dde8143501e6940b22f644be75a4cc90b2d81968908138"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.12",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e5113e9fd4cc14ded8e499429f396a20f98c772a47cc8622a736e1ec843c31"
+dependencies = [
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -1717,7 +1736,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3741934be594d77de1c8461ebcbbe866f585ea616a9753aa78f2bdc69f0e4579"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -1736,7 +1755,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a05c0334468e62a4dfbda34b29110aa7d70d58c7fdb2c9857b5874dd9827cc59"
 dependencies = [
  "approx",
- "num-traits",
+ "num-traits 0.2.12",
  "palette_derive",
  "phf",
  "phf_codegen",
@@ -2425,7 +2444,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f5b132530b1ac069df335577e3581765995cba5a13995cdbbdbc8fb057c532c"
 dependencies = [
  "bitflags",
- "num-traits",
+ "num-traits 0.2.12",
 ]
 
 [[package]]
@@ -2513,7 +2532,7 @@ dependencies = [
  "err-derive",
  "fnv",
  "main_error",
- "num-traits",
+ "num-traits 0.2.12",
  "num_enum 0.4.3",
  "parse-display",
  "serde",

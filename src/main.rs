@@ -273,22 +273,26 @@ impl SettingsPane {
                 )
             },
         );
-        let choose_heatmap_type = [HeatmapType::VictimPosition, HeatmapType::KillerPosition]
-            .iter()
-            .fold(
-                Column::new().spacing(10).push(Text::new("Heatmap type:")),
-                |column, heatmap_type| {
-                    column.push(
-                        Radio::new(
-                            *heatmap_type,
-                            &format!("{}", heatmap_type),
-                            Some(self.heatmap_type),
-                            Message::HeatmapTypeChanged,
-                        )
-                        .style(self.theme),
+        let choose_heatmap_type = [
+            HeatmapType::VictimPosition,
+            HeatmapType::KillerPosition,
+            HeatmapType::Lines,
+        ]
+        .iter()
+        .fold(
+            Column::new().spacing(10).push(Text::new("Heatmap type:")),
+            |column, heatmap_type| {
+                column.push(
+                    Radio::new(
+                        *heatmap_type,
+                        &format!("{}", heatmap_type),
+                        Some(self.heatmap_type),
+                        Message::HeatmapTypeChanged,
                     )
-                },
-            );
+                    .style(self.theme),
+                )
+            },
+        );
 
         let x_pos_input = TextInput::new(
             &mut self.x_pos_input_state,
@@ -607,18 +611,33 @@ impl Application for App {
             Message::XPosInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.x_pos = input.parse().ok();
+                if let Some(x_pos) = settings_pane.x_pos {
+                    if !x_pos.is_normal() && x_pos != 0.0 {
+                        settings_pane.x_pos = None;
+                    }
+                }
                 settings_pane.x_pos_input = input;
                 self.try_generate_heatmap();
             }
             Message::YPosInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.y_pos = input.parse().ok();
+                if let Some(y_pos) = settings_pane.y_pos {
+                    if !y_pos.is_normal() && y_pos != 0.0 {
+                        settings_pane.y_pos = None;
+                    }
+                }
                 settings_pane.y_pos_input = input;
                 self.try_generate_heatmap();
             }
             Message::ScaleInputChanged(input) => {
                 let settings_pane = self.get_settings_pane();
                 settings_pane.scale = input.parse().ok();
+                if let Some(scale) = settings_pane.scale {
+                    if !scale.is_normal() {
+                        settings_pane.scale = None;
+                    }
+                }
                 settings_pane.scale_input = input;
                 self.try_generate_heatmap();
             }

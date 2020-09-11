@@ -19,6 +19,7 @@ iced_native = { git = "https://github.com/hecrj/iced.git", rev = "ff15ebc54778de
 tokio = { version = "0.2", features = ["blocking"] }
 rayon = "1.4.0"
 nfd2 = "=0.2.1"
+line_drawing = "=0.8.0"
 
 # [profile.release]
 # lto = true

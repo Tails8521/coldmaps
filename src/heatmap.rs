@@ -30,6 +30,7 @@ impl Display for CoordsType {
 pub enum HeatmapType {
     VictimPosition,
     KillerPosition,
+    Lines,
 }
 
 impl Default for HeatmapType {
@@ -43,6 +44,7 @@ impl Display for HeatmapType {
         match self {
             HeatmapType::VictimPosition => write!(f, "Victim position"),
             HeatmapType::KillerPosition => write!(f, "Killer position"),
+            HeatmapType::Lines => write!(f, "Killer -> victim lines"),
         }
     }
 }
@@ -104,11 +106,84 @@ impl HeatMapGenerator {
         deaths: impl IntoIterator<Item = &'a Death>,
         image: &mut ImageBuffer<Rgb<u8>, Vec<u8>>,
     ) {
-        let nb_pixels = (image.width() * image.height()) as usize;
-        let mut intensities = Vec::with_capacity(nb_pixels);
-        intensities.resize_with(nb_pixels, || 0.0);
-        let mut max_intensity = f32::NEG_INFINITY;
-        let gradient = Gradient::new(vec![
+        // lines
+        if heatmap_type == HeatmapType::Lines {
+            let line_gradient = Gradient::new(vec![
+                LinSrgba::new(0.0, 0.6, 1.0, 1.0),
+                LinSrgba::new(0.067, 0.8, 1.0, 1.0),
+                LinSrgba::new(0.33, 1.0, 0.33, 1.0),
+                LinSrgba::new(1.0, 0.0, 0.0, 1.0),
+                LinSrgba::new(1.0, 0.8, 0.0, 1.0),
+                // LinSrgba::new(1.0, 0.0, 0.0, 1.0),
+                // LinSrgba::new(1.0, 1.0, 0.0, 1.0),
+                // LinSrgba::new(0.0, 1.0, 0.0, 1.0),
+                // LinSrgba::new(0.0, 1.0, 1.0, 1.0),
+                // LinSrgba::new(0.0, 0.0, 1.0, 1.0),
+            ]);
+            for death in deaths {
+                if let (Some(killer_entity), Some(victim_entity)) =
+                    (&death.killer_entity_state, &death.victim_entity_state)
+                {
+                    let killer_coords = self.game_coords_to_screen_coords(
+                        killer_entity.position.x,
+                        killer_entity.position.y,
+                    );
+                    let victim_coords = self.game_coords_to_screen_coords(
+                        victim_entity.position.x,
+                        victim_entity.position.y,
+                    );
+                    let points: Vec<((i32, i32), f32)> =
+                        line_drawing::XiaolinWu::<f32, i32>::new(killer_coords, victim_coords)
+                            .collect();
+
+                    // this is needed because the line drawing algorithm doesn't always go in the start-end order, we need to check what order was used and invert the gradient as needed
+                    let (first_point_x, first_point_y) = match points.get(0) {
+                        Some(((first_point_x, first_point_y), _)) => {
+                            (*first_point_x as f32, *first_point_y as f32)
+                        }
+                        None => continue,
+                    };
+                    let dist_killer_x = killer_coords.0 - first_point_x;
+                    let dist_killer_y = killer_coords.1 - first_point_y;
+                    let dist_victim_x = victim_coords.0 - first_point_x;
+                    let dist_victim_y = victim_coords.1 - first_point_y;
+                    let invert_gradient = dist_killer_x * dist_killer_x
+                        + dist_killer_y * dist_killer_y
+                        > dist_victim_x * dist_victim_x + dist_victim_y * dist_victim_y;
+
+                    let len = points.len() as f32;
+                    for (index, ((x, y), alpha)) in points.iter().enumerate() {
+                        let (x, y) = (*x, *y);
+                        if y < 0 || y >= image.height() as i32 || x < 0 || x >= image.width() as i32
+                        {
+                            continue;
+                        }
+                        let color = if invert_gradient {
+                            line_gradient.get(1.0 - ((index + 1) as f32 / len))
+                        } else {
+                            line_gradient.get((index + 1) as f32 / len)
+                        };
+                        let pixel = image.get_pixel_mut(x as u32, y as u32);
+                        if let [r, g, b] = pixel.channels() {
+                            *pixel = Rgb::from([
+                                ((alpha * color.red + (1.0 - alpha) * (*r as f32 / 255.0)) * 255.0)
+                                    as u8,
+                                ((alpha * color.green + (1.0 - alpha) * (*g as f32 / 255.0))
+                                    * 255.0) as u8,
+                                ((alpha * color.blue + (1.0 - alpha) * (*b as f32 / 255.0)) * 255.0)
+                                    as u8,
+                            ]);
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // heatmap
+        let heatmap_gradient = Gradient::new(vec![
             // LinSrgba::new(0.0, 0.0, 0.0, 0.0),
             LinSrgba::new(0.0, 0.0, 1.0, 0.0),
             LinSrgba::new(0.0, 1.0, 1.0, 0.25),
@@ -117,10 +192,15 @@ impl HeatMapGenerator {
             LinSrgba::new(1.0, 0.0, 0.0, 1.0),
             // LinSrgba::new(1.0, 1.0, 1.0, 1.0),
         ]);
+        let nb_pixels = (image.width() * image.height()) as usize;
+        let mut intensities = Vec::with_capacity(nb_pixels);
+        intensities.resize_with(nb_pixels, || 0.0);
+        let mut max_intensity = f32::NEG_INFINITY;
         for death in deaths {
             let entity_state = match heatmap_type {
                 HeatmapType::VictimPosition => &death.victim_entity_state,
                 HeatmapType::KillerPosition => &death.killer_entity_state,
+                HeatmapType::Lines => unreachable!(),
             };
             if let Some(entity_state) = entity_state {
                 let game_coords = entity_state.position;
@@ -152,7 +232,7 @@ impl HeatMapGenerator {
         }
         for (pixel, base_intensity) in image.pixels_mut().zip(intensities) {
             let intensity = base_intensity / max_intensity;
-            let heat_color = gradient.get(intensity);
+            let heat_color = heatmap_gradient.get(intensity);
             if let [r, g, b] = pixel.channels() {
                 *pixel = Rgb::from([
                     ((heat_color.alpha * heat_color.red

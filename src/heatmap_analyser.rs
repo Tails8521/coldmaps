@@ -9,9 +9,7 @@ use std::{
     ops::{Index, IndexMut},
     rc::Rc,
 };
-use tf_demo_parser::demo::gameevent_gen::{
-    GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent,
-};
+use tf_demo_parser::demo::gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent};
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
 use tf_demo_parser::demo::message::usermessage::{ChatMessageKind, SayText2Message, UserMessage};
 use tf_demo_parser::demo::message::{Message, MessageType};
@@ -72,9 +70,7 @@ impl Default for Team {
     }
 }
 
-#[derive(
-    Debug, Clone, Serialize_repr, Deserialize_repr, Copy, PartialEq, Eq, Hash, TryFromPrimitive,
-)]
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, Copy, PartialEq, Eq, Hash, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Class {
     Other = 0,
@@ -201,11 +197,7 @@ pub struct UserInfo {
 
 impl PartialEq for UserInfo {
     fn eq(&self, other: &UserInfo) -> bool {
-        self.classes == other.classes
-            && self.name == other.name
-            && self.user_id == other.user_id
-            && self.steam_id == other.steam_id
-            && self.team == other.team
+        self.classes == other.classes && self.name == other.name && self.user_id == other.user_id && self.steam_id == other.steam_id && self.team == other.team
     }
 }
 
@@ -226,23 +218,10 @@ pub struct Death {
 }
 
 impl Death {
-    pub fn from_event(
-        event: &PlayerDeathEvent,
-        tick: u32,
-        users: &BTreeMap<UserId, UserInfo>,
-    ) -> Self {
+    pub fn from_event(event: &PlayerDeathEvent, tick: u32, users: &BTreeMap<UserId, UserInfo>) -> Self {
         let (assister, assister_steamid) = if event.assister < (16 * 1024) {
             let assister = UserId::from(event.assister);
-            (
-                Some(assister),
-                Some(
-                    users
-                        .get(&assister)
-                        .expect("Can't get assister")
-                        .steam_id
-                        .clone(),
-                ),
-            )
+            (Some(assister), Some(users.get(&assister).expect("Can't get assister").steam_id.clone()))
         } else {
             (None, None)
         };
@@ -253,20 +232,12 @@ impl Death {
             assister_steamid,
             tick,
             killer,
-            killer_steamid: users
-                .get(&killer)
-                .expect("Can't get killer")
-                .steam_id
-                .clone(),
+            killer_steamid: users.get(&killer).expect("Can't get killer").steam_id.clone(),
             killer_entity: event.inflictor_ent_index,
             killer_entity_state: None,
             weapon: event.weapon.clone(),
             victim,
-            victim_steamid: users
-                .get(&victim)
-                .expect("Can't get victim")
-                .steam_id
-                .clone(),
+            victim_steamid: users.get(&victim).expect("Can't get victim").steam_id.clone(),
             victim_entity: event.victim_ent_index,
             victim_entity_state: None,
         }
@@ -341,10 +312,7 @@ impl MessageHandler for HeatmapAnalyser {
 
     fn does_handle(message_type: MessageType) -> bool {
         match message_type {
-            MessageType::GameEvent
-            | MessageType::UserMessage
-            | MessageType::ServerInfo
-            | MessageType::PacketEntities => true,
+            MessageType::GameEvent | MessageType::UserMessage | MessageType::ServerInfo | MessageType::PacketEntities => true,
             _ => false,
         }
     }
@@ -355,9 +323,7 @@ impl MessageHandler for HeatmapAnalyser {
         }
         self.state.borrow_mut().end_tick = tick;
         match message {
-            Message::ServerInfo(message) => {
-                self.state.borrow_mut().interval_per_tick = message.interval_per_tick
-            }
+            Message::ServerInfo(message) => self.state.borrow_mut().interval_per_tick = message.interval_per_tick,
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
             Message::UserMessage(message) => self.handle_user_message(&message, tick),
             Message::PacketEntities(message) => {
@@ -372,21 +338,14 @@ impl MessageHandler for HeatmapAnalyser {
     fn handle_string_entry(&mut self, table: &str, _index: usize, entry: &StringTableEntry) {
         match table {
             "userinfo" => {
-                let _ = self.parse_user_info(
-                    entry.text.as_ref().map(|s| s.as_str()),
-                    entry.extra_data.as_ref().map(|data| data.data.clone()),
-                );
+                let _ = self.parse_user_info(entry.text.as_ref().map(|s| s.as_str()), entry.extra_data.as_ref().map(|data| data.data.clone()));
             }
             _ => {}
         }
     }
 
     fn handle_data_tables(&mut self, _tables: &[ParseSendTable], server_classes: &[ServerClass]) {
-        self.class_names = server_classes
-            .iter()
-            .map(|class| &class.name)
-            .cloned()
-            .collect();
+        self.class_names = server_classes.iter().map(|class| &class.name).cloned().collect();
     }
 
     fn into_output(self, _state: &ParserState) -> Self::Output {
@@ -396,18 +355,11 @@ impl MessageHandler for HeatmapAnalyser {
 
 impl HeatmapAnalyser {
     pub fn new(state: Rc<RefCell<HeatmapAnalysis>>) -> Self {
-        Self {
-            state,
-            ..Default::default()
-        }
+        Self { state, ..Default::default() }
     }
 
     pub fn handle_entity(&mut self, entity: &PacketEntity) {
-        let class_name: &str = self
-            .class_names
-            .get(usize::from(entity.server_class))
-            .map(|class_name| class_name.as_str())
-            .unwrap_or("");
+        let class_name: &str = self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or("");
         match class_name {
             "CTFPlayer" => self.handle_player_entity(entity),
             "CTFPlayerResource" => self.handle_player_resource(entity),
@@ -420,25 +372,11 @@ impl HeatmapAnalyser {
         for prop in &entity.props {
             if let Ok(player_id) = u32::from_str(prop.definition.name.as_str()) {
                 let entity_id = EntityId::from(player_id);
-                if let Some(player) = self
-                    .state
-                    .borrow_mut()
-                    .player_entities
-                    .iter_mut()
-                    .find(|player| player.entity == entity_id)
-                {
+                if let Some(player) = self.state.borrow_mut().player_entities.iter_mut().find(|player| player.entity == entity_id) {
                     match prop.definition.owner_table.as_str() {
-                        "m_iTeam" => {
-                            player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default())
-                        }
-                        "m_iMaxHealth" => {
-                            player.max_health =
-                                i64::try_from(&prop.value).unwrap_or_default() as u16
-                        }
-                        "m_iPlayerClass" => {
-                            player.class =
-                                Class::new(i64::try_from(&prop.value).unwrap_or_default())
-                        }
+                        "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                        "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                        "m_iPlayerClass" => player.class = Class::new(i64::try_from(&prop.value).unwrap_or_default()),
                         _ => {}
                     }
                 }
@@ -453,39 +391,22 @@ impl HeatmapAnalyser {
         for prop in &entity.props {
             match prop.definition.owner_table.as_str() {
                 "DT_BasePlayer" => match prop.definition.name.as_str() {
-                    "m_iHealth" => {
-                        player.health = i64::try_from(&prop.value).unwrap_or_default() as u16
-                    }
-                    "m_iMaxHealth" => {
-                        player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16
-                    }
-                    "m_lifeState" => {
-                        player.state =
-                            PlayerState::new(i64::try_from(&prop.value).unwrap_or_default())
-                    }
+                    "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                    "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                    "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
                     _ => {}
                 },
-                "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => {
-                    match prop.definition.name.as_str() {
-                        "m_vecOrigin" => {
-                            let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
-                            player.position.x = pos_xy.x;
-                            player.position.y = pos_xy.y;
-                        }
-                        "m_vecOrigin[2]" => {
-                            player.position.z = f32::try_from(&prop.value).unwrap_or_default()
-                        }
-                        "m_angEyeAngles[0]" => {
-                            player.view_angle_vertical =
-                                f32::try_from(&prop.value).unwrap_or_default()
-                        }
-                        "m_angEyeAngles[1]" => {
-                            player.view_angle_horizontal =
-                                f32::try_from(&prop.value).unwrap_or_default()
-                        }
-                        _ => {}
+                "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop.definition.name.as_str() {
+                    "m_vecOrigin" => {
+                        let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
+                        player.position.x = pos_xy.x;
+                        player.position.y = pos_xy.y;
                     }
-                }
+                    "m_vecOrigin[2]" => player.position.z = f32::try_from(&prop.value).unwrap_or_default(),
+                    "m_angEyeAngles[0]" => player.view_angle_vertical = f32::try_from(&prop.value).unwrap_or_default(),
+                    "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -501,10 +422,8 @@ impl HeatmapAnalyser {
                 value: SendPropValue::Vector(boundary_max),
                 ..
             }),
-        ) = (
-            entity.get_prop_by_name("DT_WORLD", "m_WorldMins"),
-            entity.get_prop_by_name("DT_WORLD", "m_WorldMaxs"),
-        ) {
+        ) = (entity.get_prop_by_name("DT_WORLD", "m_WorldMins"), entity.get_prop_by_name("DT_WORLD", "m_WorldMaxs"))
+        {
             self.state.borrow_mut().world = Some(World {
                 boundary_min: boundary_min.clone(),
                 boundary_max: boundary_max.clone(),
@@ -519,22 +438,13 @@ impl HeatmapAnalyser {
                     self.change_name(from, text_message.text.clone());
                 }
             } else {
-                self.state
-                    .borrow_mut()
-                    .chat
-                    .push(ChatMassage::from_message(text_message, tick));
+                self.state.borrow_mut().chat.push(ChatMassage::from_message(text_message, tick));
             }
         }
     }
 
     fn change_name(&mut self, from: String, to: String) {
-        if let Some(user) = self
-            .state
-            .borrow_mut()
-            .users
-            .values_mut()
-            .find(|user| user.name == from)
-        {
+        if let Some(user) = self.state.borrow_mut().users.values_mut().find(|user| user.name == from) {
             user.name = to;
         }
     }
@@ -546,27 +456,19 @@ impl HeatmapAnalyser {
             GameEvent::PlayerDeath(event) => {
                 let mut state = self.state.borrow_mut();
                 let mut death = Death::from_event(event, tick, &state.users);
-                let killer = state
-                    .users
-                    .get_mut(&death.killer)
-                    .expect("got a kill from unknown user");
+                let killer = state.users.get_mut(&death.killer).expect("got a kill from unknown user");
                 if death.killer_entity < MAX_PLAYER_ENTITY {
                     killer.entity_id = Some(EntityId::from(death.killer_entity));
                 }
                 if let Some(killer_entity) = killer.entity_id {
-                    death.killer_entity_state =
-                        Some(state.get_or_create_player_entity(killer_entity).clone());
+                    death.killer_entity_state = Some(state.get_or_create_player_entity(killer_entity).clone());
                 }
-                let victim = state
-                    .users
-                    .get_mut(&death.victim)
-                    .expect("got a kill on unknown user");
+                let victim = state.users.get_mut(&death.victim).expect("got a kill on unknown user");
                 if death.victim_entity < MAX_PLAYER_ENTITY {
                     victim.entity_id = Some(EntityId::from(death.victim_entity));
                 }
                 if let Some(victim_entity) = victim.entity_id {
-                    death.victim_entity_state =
-                        Some(state.get_or_create_player_entity(victim_entity).clone());
+                    death.victim_entity_state = Some(state.get_or_create_player_entity(victim_entity).clone());
                 }
                 state.deaths.push(death);
             }
@@ -579,10 +481,7 @@ impl HeatmapAnalyser {
             }
             GameEvent::TeamPlayRoundWin(event) => {
                 if event.win_reason != WIN_REASON_TIME_LIMIT {
-                    self.state
-                        .borrow_mut()
-                        .rounds
-                        .push(Round::from_event(event, tick))
+                    self.state.borrow_mut().rounds.push(Round::from_event(event, tick))
                 }
             }
             _ => {}
@@ -591,9 +490,7 @@ impl HeatmapAnalyser {
 
     fn parse_user_info(&mut self, text: Option<&str>, data: Option<Stream>) -> ReadResult<()> {
         if let Some(mut data) = data {
-            let name: String = data
-                .read_sized(32)
-                .unwrap_or_else(|_| "Malformed Name".into());
+            let name: String = data.read_sized(32).unwrap_or_else(|_| "Malformed Name".into());
             let user_id: UserId = data.read::<u32>()?.into();
             let steam_id: String = data.read()?;
 

@@ -65,14 +65,7 @@ pub struct HeatMapGenerator {
 }
 
 impl HeatMapGenerator {
-    pub fn new(
-        pos_x: f32,
-        pos_y: f32,
-        screen_width: u32,
-        screen_height: u32,
-        scale: f32,
-        coords_type: CoordsType,
-    ) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType) -> Self {
         let screen_width = screen_width as f32;
         let screen_height = screen_height as f32;
         let aspect_ratio = screen_width / screen_height;
@@ -100,20 +93,19 @@ impl HeatMapGenerator {
         }
     }
 
-    pub fn generate_heatmap<'a>(
-        &self,
-        heatmap_type: HeatmapType,
-        deaths: impl IntoIterator<Item = &'a Death>,
-        image: &mut ImageBuffer<Rgb<u8>, Vec<u8>>,
-    ) {
+    pub fn generate_heatmap<'a>(&self, heatmap_type: HeatmapType, deaths: impl IntoIterator<Item = &'a Death>, image: &mut ImageBuffer<Rgb<u8>, Vec<u8>>) {
         // lines
         if heatmap_type == HeatmapType::Lines {
             let line_gradient = Gradient::new(vec![
-                LinSrgba::new(0.0, 0.6, 1.0, 1.0),
-                LinSrgba::new(0.067, 0.8, 1.0, 1.0),
-                LinSrgba::new(0.33, 1.0, 0.33, 1.0),
-                LinSrgba::new(1.0, 0.0, 0.0, 1.0),
-                LinSrgba::new(1.0, 0.8, 0.0, 1.0),
+                LinSrgba::new(0.0, 0.0, 1.0, 1.0),
+                LinSrgba::new(1.0, 1.0, 0.0, 1.0),
+
+                // LinSrgba::new(0.0, 0.6, 1.0, 1.0),
+                // LinSrgba::new(0.067, 0.8, 1.0, 1.0),
+                // LinSrgba::new(0.33, 1.0, 0.33, 1.0),
+                // LinSrgba::new(1.0, 0.0, 0.0, 1.0),
+                // LinSrgba::new(1.0, 0.8, 0.0, 1.0),
+
                 // LinSrgba::new(1.0, 0.0, 0.0, 1.0),
                 // LinSrgba::new(1.0, 1.0, 0.0, 1.0),
                 // LinSrgba::new(0.0, 1.0, 0.0, 1.0),
@@ -121,41 +113,26 @@ impl HeatMapGenerator {
                 // LinSrgba::new(0.0, 0.0, 1.0, 1.0),
             ]);
             for death in deaths {
-                if let (Some(killer_entity), Some(victim_entity)) =
-                    (&death.killer_entity_state, &death.victim_entity_state)
-                {
-                    let killer_coords = self.game_coords_to_screen_coords(
-                        killer_entity.position.x,
-                        killer_entity.position.y,
-                    );
-                    let victim_coords = self.game_coords_to_screen_coords(
-                        victim_entity.position.x,
-                        victim_entity.position.y,
-                    );
-                    let points: Vec<((i32, i32), f32)> =
-                        line_drawing::XiaolinWu::<f32, i32>::new(killer_coords, victim_coords)
-                            .collect();
+                if let (Some(killer_entity), Some(victim_entity)) = (&death.killer_entity_state, &death.victim_entity_state) {
+                    let killer_coords = self.game_coords_to_screen_coords(killer_entity.position.x, killer_entity.position.y);
+                    let victim_coords = self.game_coords_to_screen_coords(victim_entity.position.x, victim_entity.position.y);
+                    let points: Vec<((i32, i32), f32)> = line_drawing::XiaolinWu::<f32, i32>::new(killer_coords, victim_coords).collect();
 
                     // this is needed because the line drawing algorithm doesn't always go in the start-end order, we need to check what order was used and invert the gradient as needed
                     let (first_point_x, first_point_y) = match points.get(0) {
-                        Some(((first_point_x, first_point_y), _)) => {
-                            (*first_point_x as f32, *first_point_y as f32)
-                        }
+                        Some(((first_point_x, first_point_y), _)) => (*first_point_x as f32, *first_point_y as f32),
                         None => continue,
                     };
                     let dist_killer_x = killer_coords.0 - first_point_x;
                     let dist_killer_y = killer_coords.1 - first_point_y;
                     let dist_victim_x = victim_coords.0 - first_point_x;
                     let dist_victim_y = victim_coords.1 - first_point_y;
-                    let invert_gradient = dist_killer_x * dist_killer_x
-                        + dist_killer_y * dist_killer_y
-                        > dist_victim_x * dist_victim_x + dist_victim_y * dist_victim_y;
+                    let invert_gradient = dist_killer_x * dist_killer_x + dist_killer_y * dist_killer_y > dist_victim_x * dist_victim_x + dist_victim_y * dist_victim_y;
 
                     let len = points.len() as f32;
                     for (index, ((x, y), alpha)) in points.iter().enumerate() {
                         let (x, y) = (*x, *y);
-                        if y < 0 || y >= image.height() as i32 || x < 0 || x >= image.width() as i32
-                        {
+                        if y < 0 || y >= image.height() as i32 || x < 0 || x >= image.width() as i32 {
                             continue;
                         }
                         let color = if invert_gradient {
@@ -166,12 +143,9 @@ impl HeatMapGenerator {
                         let pixel = image.get_pixel_mut(x as u32, y as u32);
                         if let [r, g, b] = pixel.channels() {
                             *pixel = Rgb::from([
-                                ((alpha * color.red + (1.0 - alpha) * (*r as f32 / 255.0)) * 255.0)
-                                    as u8,
-                                ((alpha * color.green + (1.0 - alpha) * (*g as f32 / 255.0))
-                                    * 255.0) as u8,
-                                ((alpha * color.blue + (1.0 - alpha) * (*b as f32 / 255.0)) * 255.0)
-                                    as u8,
+                                ((alpha * color.red + (1.0 - alpha) * (*r as f32 / 255.0)) * 255.0) as u8,
+                                ((alpha * color.green + (1.0 - alpha) * (*g as f32 / 255.0)) * 255.0) as u8,
+                                ((alpha * color.blue + (1.0 - alpha) * (*b as f32 / 255.0)) * 255.0) as u8,
                             ]);
                         } else {
                             unreachable!();
@@ -235,15 +209,9 @@ impl HeatMapGenerator {
             let heat_color = heatmap_gradient.get(intensity);
             if let [r, g, b] = pixel.channels() {
                 *pixel = Rgb::from([
-                    ((heat_color.alpha * heat_color.red
-                        + (1.0 - heat_color.alpha) * (*r as f32 / 255.0))
-                        * 255.0) as u8,
-                    ((heat_color.alpha * heat_color.green
-                        + (1.0 - heat_color.alpha) * (*g as f32 / 255.0))
-                        * 255.0) as u8,
-                    ((heat_color.alpha * heat_color.blue
-                        + (1.0 - heat_color.alpha) * (*b as f32 / 255.0))
-                        * 255.0) as u8,
+                    ((heat_color.alpha * heat_color.red + (1.0 - heat_color.alpha) * (*r as f32 / 255.0)) * 255.0) as u8,
+                    ((heat_color.alpha * heat_color.green + (1.0 - heat_color.alpha) * (*g as f32 / 255.0)) * 255.0) as u8,
+                    ((heat_color.alpha * heat_color.blue + (1.0 - heat_color.alpha) * (*b as f32 / 255.0)) * 255.0) as u8,
                 ]);
             } else {
                 unreachable!();

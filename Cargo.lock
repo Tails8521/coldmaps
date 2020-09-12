@@ -299,6 +299,7 @@ dependencies = [
 name = "coldmaps"
 version = "0.1.1"
 dependencies = [
+ "enum_dispatch",
  "iced",
  "iced_native",
  "image",
@@ -576,6 +577,18 @@ name = "either"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd56b59865bce947ac5958779cfa508f6c3b9497cc762b7e24a12d11ccde2c4f"
+
+[[package]]
+name = "enum_dispatch"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d2984c9b91ef2cd76b29bbc4b6f123b146e73a4bae7dbde490bd5115f6f8f7d"
+dependencies = [
+ "once_cell",
+ "proc-macro2 1.0.18",
+ "quote 1.0.7",
+ "syn",
+]
 
 [[package]]
 name = "enumflags2"

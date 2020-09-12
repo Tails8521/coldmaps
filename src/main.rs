@@ -1,12 +1,12 @@
 use coldmaps::*;
 mod style;
 
+use filters::{Filter, FilterTrait};
 use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::HeatmapAnalysis;
 use iced::{
-    button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application,
-    Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image, Length, Point,
-    Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput,
+    button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application, Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image,
+    Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput,
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb};
 use pane_grid::{Axis, Pane};
@@ -141,22 +141,15 @@ impl DemoList {
                     .iter_mut()
                     .enumerate()
                     .fold(Column::new().spacing(10), |column, (index, demo)| {
-                        let delete_button = Button::new(&mut demo.delete_button, delete_icon())
-                            .style(theme)
-                            .on_press(Message::DemoRemoved(index));
-                        let row = Row::new()
-                            .push(delete_button)
-                            .push(Text::new(&demo.file_name).size(20));
+                        let delete_button = Button::new(&mut demo.delete_button, delete_icon()).style(theme).on_press(Message::DemoRemoved(index));
+                        let row = Row::new().push(delete_button).push(Text::new(&demo.file_name).size(20));
                         column.push(row)
                     })
                     .into(),
                 style::ResultContainer::Ok,
             )
         };
-        let demos_scroll = Scrollable::new(&mut self.scroll_state)
-            .push(demos_list)
-            .width(Length::Fill)
-            .height(Length::Fill);
+        let demos_scroll = Scrollable::new(&mut self.scroll_state).push(demos_list).width(Length::Fill).height(Length::Fill);
 
         let result_container = Container::new(demos_scroll)
             .width(Length::Fill)
@@ -166,11 +159,7 @@ impl DemoList {
             .padding(10)
             .style(style);
 
-        Container::new(result_container)
-            .padding(4)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 }
 
@@ -178,7 +167,7 @@ impl DemoList {
 struct FiltersPane {
     theme: style::Theme,
     busy: bool,
-    filters: Vec<()>, // TODO
+    filters: Vec<Filter>, // TODO
 }
 
 impl FiltersPane {
@@ -208,11 +197,7 @@ impl FiltersPane {
             .padding(10)
             .style(style);
 
-        Container::new(result_container)
-            .padding(4)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 }
 
@@ -243,112 +228,47 @@ impl SettingsPane {
         } else {
             style::ResultContainer::Error
         };
-        let choose_theme = style::Theme::ALL.iter().fold(
-            Column::new().spacing(10).push(Text::new("Theme:")),
-            |column, theme| {
-                column.push(
-                    Radio::new(
-                        *theme,
-                        &format!("{:?}", theme),
-                        Some(self.theme),
-                        Message::ThemeChanged,
-                    )
-                    .style(self.theme),
-                )
-            },
-        );
-        let choose_coords_type = [CoordsType::ShowPos, CoordsType::Console].iter().fold(
-            Column::new()
-                .spacing(10)
-                .push(Text::new("Coordinates origin:")),
-            |column, coords_type| {
-                column.push(
-                    Radio::new(
-                        *coords_type,
-                        &format!("{}", coords_type),
-                        Some(self.coords_type),
-                        Message::CoordsTypeChanged,
-                    )
-                    .style(self.theme),
-                )
-            },
-        );
-        let choose_heatmap_type = [
-            HeatmapType::VictimPosition,
-            HeatmapType::KillerPosition,
-            HeatmapType::Lines,
-        ]
-        .iter()
-        .fold(
-            Column::new().spacing(10).push(Text::new("Heatmap type:")),
-            |column, heatmap_type| {
-                column.push(
-                    Radio::new(
-                        *heatmap_type,
-                        &format!("{}", heatmap_type),
-                        Some(self.heatmap_type),
-                        Message::HeatmapTypeChanged,
-                    )
-                    .style(self.theme),
-                )
-            },
-        );
+        let choose_theme = style::Theme::ALL.iter().fold(Column::new().spacing(10).push(Text::new("Theme:")), |column, theme| {
+            column.push(Radio::new(*theme, &format!("{:?}", theme), Some(self.theme), Message::ThemeChanged).style(self.theme))
+        });
+        let choose_coords_type = [CoordsType::ShowPos, CoordsType::Console]
+            .iter()
+            .fold(Column::new().spacing(10).push(Text::new("Coordinates origin:")), |column, coords_type| {
+                column.push(Radio::new(*coords_type, &format!("{}", coords_type), Some(self.coords_type), Message::CoordsTypeChanged).style(self.theme))
+            });
+        let choose_heatmap_type = [HeatmapType::VictimPosition, HeatmapType::KillerPosition, HeatmapType::Lines]
+            .iter()
+            .fold(Column::new().spacing(10).push(Text::new("Heatmap type:")), |column, heatmap_type| {
+                column.push(Radio::new(*heatmap_type, &format!("{}", heatmap_type), Some(self.heatmap_type), Message::HeatmapTypeChanged).style(self.theme))
+            });
 
-        let x_pos_input = TextInput::new(
-            &mut self.x_pos_input_state,
-            "Camera x position",
-            &self.x_pos_input,
-            Message::XPosInputChanged,
-        )
-        .style(self.theme);
+        let x_pos_input = TextInput::new(&mut self.x_pos_input_state, "Camera x position", &self.x_pos_input, Message::XPosInputChanged).style(self.theme);
         let x_pos_style = if self.x_pos.is_some() {
             style::ResultContainer::Ok
         } else {
             style::ResultContainer::Error
         };
-        let x_pos_border = Container::new(x_pos_input)
-            .padding(3)
-            .width(Length::Fill)
-            .style(x_pos_style);
+        let x_pos_border = Container::new(x_pos_input).padding(3).width(Length::Fill).style(x_pos_style);
 
-        let y_pos_input = TextInput::new(
-            &mut self.y_pos_input_state,
-            "Camera y position",
-            &self.y_pos_input,
-            Message::YPosInputChanged,
-        )
-        .style(self.theme);
+        let y_pos_input = TextInput::new(&mut self.y_pos_input_state, "Camera y position", &self.y_pos_input, Message::YPosInputChanged).style(self.theme);
         let y_pos_style = if self.y_pos.is_some() {
             style::ResultContainer::Ok
         } else {
             style::ResultContainer::Error
         };
-        let y_pos_border = Container::new(y_pos_input)
-            .padding(3)
-            .width(Length::Fill)
-            .style(y_pos_style);
+        let y_pos_border = Container::new(y_pos_input).padding(3).width(Length::Fill).style(y_pos_style);
 
-        let scale_input = TextInput::new(
-            &mut self.scale_input_state,
-            "Camera scale",
-            &self.scale_input,
-            Message::ScaleInputChanged,
-        )
-        .style(self.theme);
+        let scale_input = TextInput::new(&mut self.scale_input_state, "Camera scale", &self.scale_input, Message::ScaleInputChanged).style(self.theme);
         let scale_style = if self.scale.is_some() {
             style::ResultContainer::Ok
         } else {
             style::ResultContainer::Error
         };
-        let scale_border = Container::new(scale_input)
-            .padding(3)
-            .width(Length::Fill)
-            .style(scale_style);
-        let mut export_image_button =
-            Button::new(&mut self.export_image_button, Text::new("Export image"))
-                .padding(10)
-                .style(self.theme)
-                .width(Length::Fill);
+        let scale_border = Container::new(scale_input).padding(3).width(Length::Fill).style(scale_style);
+        let mut export_image_button = Button::new(&mut self.export_image_button, Text::new("Export image"))
+            .padding(10)
+            .style(self.theme)
+            .width(Length::Fill);
         if self.image_ready {
             export_image_button = export_image_button.on_press(Message::ExportImagePressed);
         }
@@ -372,17 +292,9 @@ impl SettingsPane {
 
         let scroll = Scrollable::new(&mut self.scroll_state).push(settings_content);
 
-        let result_container = Container::new(scroll)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(10)
-            .style(style);
+        let result_container = Container::new(scroll).width(Length::Fill).height(Length::Fill).padding(10).style(style);
 
-        Container::new(result_container)
-            .padding(4)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 }
 
@@ -395,10 +307,7 @@ struct Preview {
 impl Preview {
     fn view(&mut self) -> Element<Message> {
         let (image, style): (Element<_>, _) = if let Some(heatmap_image) = &self.heatmap_image {
-            (
-                Image::new(heatmap_image.handle.clone()).into(),
-                style::ResultContainer::Ok,
-            )
+            (Image::new(heatmap_image.handle.clone()).into(), style::ResultContainer::Ok)
         } else {
             (
                 Text::new("Drag and drop the level overview screenshot to use it")
@@ -420,11 +329,7 @@ impl Preview {
             .padding(10)
             .style(style);
 
-        Container::new(result_container)
-            .padding(4)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 }
 #[derive(Default)]
@@ -438,9 +343,7 @@ impl LogPane {
     fn view(&mut self) -> Element<Message> {
         let log = Text::new(&self.log);
 
-        let demos_scroll = Scrollable::new(&mut self.scroll_state)
-            .push(log)
-            .width(Length::Fill);
+        let demos_scroll = Scrollable::new(&mut self.scroll_state).push(log).width(Length::Fill);
 
         let result_container = Container::new(demos_scroll)
             .width(Length::Fill)
@@ -448,11 +351,7 @@ impl LogPane {
             .padding(10)
             .style(style::ResultContainer::Ok);
 
-        Container::new(result_container)
-            .padding(4)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 
     fn log(&mut self, message: &str) {
@@ -473,36 +372,11 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (App, Command<Message>) {
-        let (mut pane_grid_state, demos_pane) =
-            pane_grid::State::new(PaneState::DemoList(Default::default()));
-        let (preview_pane, demos_preview_split) = pane_grid_state
-            .split(
-                Axis::Vertical,
-                &demos_pane,
-                PaneState::Preview(Default::default()),
-            )
-            .unwrap();
-        let (filters_pane, demos_filter_split) = pane_grid_state
-            .split(
-                Axis::Horizontal,
-                &demos_pane,
-                PaneState::FiltersPane(Default::default()),
-            )
-            .unwrap();
-        let (settings_pane, filters_settings_split) = pane_grid_state
-            .split(
-                Axis::Horizontal,
-                &filters_pane,
-                PaneState::SettingsPane(Default::default()),
-            )
-            .unwrap();
-        let (log_pane, preview_log_split) = pane_grid_state
-            .split(
-                Axis::Horizontal,
-                &preview_pane,
-                PaneState::LogPane(Default::default()),
-            )
-            .unwrap();
+        let (mut pane_grid_state, demos_pane) = pane_grid::State::new(PaneState::DemoList(Default::default()));
+        let (preview_pane, demos_preview_split) = pane_grid_state.split(Axis::Vertical, &demos_pane, PaneState::Preview(Default::default())).unwrap();
+        let (filters_pane, demos_filter_split) = pane_grid_state.split(Axis::Horizontal, &demos_pane, PaneState::FiltersPane(Default::default())).unwrap();
+        let (settings_pane, filters_settings_split) = pane_grid_state.split(Axis::Horizontal, &filters_pane, PaneState::SettingsPane(Default::default())).unwrap();
+        let (log_pane, preview_log_split) = pane_grid_state.split(Axis::Horizontal, &preview_pane, PaneState::LogPane(Default::default())).unwrap();
         pane_grid_state.resize(&demos_preview_split, 0.15);
         pane_grid_state.resize(&demos_filter_split, 0.3);
         pane_grid_state.resize(&filters_settings_split, 0.1);
@@ -529,9 +403,7 @@ impl Application for App {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::WindowEventOccurred(iced_native::Event::Window(
-                iced_native::window::Event::FileDropped(path),
-            )) => {
+            Message::WindowEventOccurred(iced_native::Event::Window(iced_native::window::Event::FileDropped(path))) => {
                 if !path.is_file() {
                     return Command::none();
                 }
@@ -547,13 +419,13 @@ impl Application for App {
                             let image = image.into_rgb();
                             let image_with_heatmap_overlay = image.clone();
                             let handle = image_to_handle(&image);
-                            self.get_preview_pane().heatmap_image.replace(HeatmapImage {
+                            self.get_preview_pane_mut().heatmap_image.replace(HeatmapImage {
                                 image,
                                 image_with_heatmap_overlay,
                                 handle,
                                 _path: path,
                             });
-                            self.get_settings_pane().image_ready = true;
+                            self.get_settings_pane_mut().image_ready = true;
                             self.try_generate_heatmap();
                         }
                     }
@@ -564,23 +436,16 @@ impl Application for App {
                 if !self.dropped_files.is_empty() {
                     self.set_busy(true);
                     let demo_count = self.dropped_files.len();
-                    self.log(&format!(
-                        "Processing {} demo{}...",
-                        demo_count,
-                        if demo_count > 1 { "s" } else { "" }
-                    ));
+                    self.log(&format!("Processing {} demo{}...", demo_count, if demo_count > 1 { "s" } else { "" }));
                     let input_paths = mem::take(&mut self.dropped_files);
-                    return Command::perform(
-                        process_demos_async(input_paths),
-                        Message::ProcessDemosDone,
-                    );
+                    return Command::perform(process_demos_async(input_paths), Message::ProcessDemosDone);
                 }
             }
             Message::PaneResized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.pane_grid_state.resize(&split, ratio);
             }
             Message::DemoRemoved(index) => {
-                let demo_list = self.get_demo_list_pane();
+                let demo_list = self.get_demo_list_pane_mut();
                 let removed = demo_list.demo_files.remove(index);
                 let death_count = removed.heatmap_analysis.deaths.len();
                 self.log(&format!(
@@ -594,22 +459,22 @@ impl Application for App {
             }
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
-                self.get_demo_list_pane().theme = theme;
-                self.get_filters_pane().theme = theme;
-                self.get_settings_pane().theme = theme;
-                self.get_preview_pane().theme = theme;
-                self.get_log_pane().theme = theme;
+                self.get_demo_list_pane_mut().theme = theme;
+                self.get_filters_pane_mut().theme = theme;
+                self.get_settings_pane_mut().theme = theme;
+                self.get_preview_pane_mut().theme = theme;
+                self.get_log_pane_mut().theme = theme;
             }
             Message::CoordsTypeChanged(coords_type) => {
-                self.get_settings_pane().coords_type = coords_type;
+                self.get_settings_pane_mut().coords_type = coords_type;
                 self.try_generate_heatmap();
             }
             Message::HeatmapTypeChanged(heatmap_type) => {
-                self.get_settings_pane().heatmap_type = heatmap_type;
+                self.get_settings_pane_mut().heatmap_type = heatmap_type;
                 self.try_generate_heatmap();
             }
             Message::XPosInputChanged(input) => {
-                let settings_pane = self.get_settings_pane();
+                let settings_pane = self.get_settings_pane_mut();
                 settings_pane.x_pos = input.parse().ok();
                 if let Some(x_pos) = settings_pane.x_pos {
                     if !x_pos.is_normal() && x_pos != 0.0 {
@@ -620,7 +485,7 @@ impl Application for App {
                 self.try_generate_heatmap();
             }
             Message::YPosInputChanged(input) => {
-                let settings_pane = self.get_settings_pane();
+                let settings_pane = self.get_settings_pane_mut();
                 settings_pane.y_pos = input.parse().ok();
                 if let Some(y_pos) = settings_pane.y_pos {
                     if !y_pos.is_normal() && y_pos != 0.0 {
@@ -631,7 +496,7 @@ impl Application for App {
                 self.try_generate_heatmap();
             }
             Message::ScaleInputChanged(input) => {
-                let settings_pane = self.get_settings_pane();
+                let settings_pane = self.get_settings_pane_mut();
                 settings_pane.scale = input.parse().ok();
                 if let Some(scale) = settings_pane.scale {
                     if !scale.is_normal() {
@@ -644,7 +509,7 @@ impl Application for App {
             Message::ProcessDemosDone(mut timed_result) => {
                 let mut demo_count = 0;
                 let mut death_count = 0;
-                let demo_list = self.get_demo_list_pane();
+                let demo_list = self.get_demo_list_pane_mut();
                 for demo in timed_result.result.iter_mut() {
                     let demo = mem::take(demo);
                     demo_count += 1;
@@ -687,10 +552,7 @@ impl Application for App {
                             if let Err(err) = heatmap_image.image_with_heatmap_overlay.save(&path) {
                                 self.log(&format!("Couldn't save the image: {}", err));
                             } else {
-                                self.log(&format!(
-                                    "Image saved: {}",
-                                    path.file_name().unwrap().to_string_lossy()
-                                ));
+                                self.log(&format!("Image saved: {}", path.file_name().unwrap().to_string_lossy()));
                             }
                         }
                         _ => unreachable!(),
@@ -708,15 +570,9 @@ impl Application for App {
 
     fn view(&mut self) -> Element<Message> {
         let pane_grid: pane_grid::PaneGrid<Message> =
-            pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state, _focus| {
-                state.view().into()
-            })
-            .on_resize(10, Message::PaneResized);
+            pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state, _focus| state.view().into()).on_resize(10, Message::PaneResized);
 
-        let content = Column::new()
-            .align_items(Align::Center)
-            .spacing(20)
-            .push(pane_grid);
+        let content = Column::new().align_items(Align::Center).spacing(20).push(pane_grid);
 
         Container::new(content)
             .width(Length::Fill)
@@ -730,40 +586,70 @@ impl Application for App {
 }
 
 impl App {
-    fn get_demo_list_pane(&mut self) -> &mut DemoList {
+    fn get_demo_list_pane(&self) -> &DemoList {
+        if let PaneState::DemoList(pane) = self.pane_grid_state.get(&self.demos_pane).unwrap() {
+            pane
+        } else {
+            unreachable!()
+        }
+    }
+    fn get_filters_pane(&self) -> &FiltersPane {
+        if let PaneState::FiltersPane(pane) = self.pane_grid_state.get(&self.filters_pane).unwrap() {
+            pane
+        } else {
+            unreachable!()
+        }
+    }
+    fn get_settings_pane(&self) -> &SettingsPane {
+        if let PaneState::SettingsPane(pane) = self.pane_grid_state.get(&self.settings_pane).unwrap() {
+            pane
+        } else {
+            unreachable!()
+        }
+    }
+    fn get_preview_pane(&self) -> &Preview {
+        if let PaneState::Preview(pane) = self.pane_grid_state.get(&self.preview_pane).unwrap() {
+            pane
+        } else {
+            unreachable!()
+        }
+    }
+    fn _get_log_pane(&self) -> &LogPane {
+        if let PaneState::LogPane(pane) = self.pane_grid_state.get(&self.log_pane).unwrap() {
+            pane
+        } else {
+            unreachable!()
+        }
+    }
+    fn get_demo_list_pane_mut(&mut self) -> &mut DemoList {
         if let PaneState::DemoList(pane) = self.pane_grid_state.get_mut(&self.demos_pane).unwrap() {
             pane
         } else {
             unreachable!()
         }
     }
-    fn get_filters_pane(&mut self) -> &mut FiltersPane {
-        if let PaneState::FiltersPane(pane) =
-            self.pane_grid_state.get_mut(&self.filters_pane).unwrap()
-        {
+    fn get_filters_pane_mut(&mut self) -> &mut FiltersPane {
+        if let PaneState::FiltersPane(pane) = self.pane_grid_state.get_mut(&self.filters_pane).unwrap() {
             pane
         } else {
             unreachable!()
         }
     }
-    fn get_settings_pane(&mut self) -> &mut SettingsPane {
-        if let PaneState::SettingsPane(pane) =
-            self.pane_grid_state.get_mut(&self.settings_pane).unwrap()
-        {
+    fn get_settings_pane_mut(&mut self) -> &mut SettingsPane {
+        if let PaneState::SettingsPane(pane) = self.pane_grid_state.get_mut(&self.settings_pane).unwrap() {
             pane
         } else {
             unreachable!()
         }
     }
-    fn get_preview_pane(&mut self) -> &mut Preview {
-        if let PaneState::Preview(pane) = self.pane_grid_state.get_mut(&self.preview_pane).unwrap()
-        {
+    fn get_preview_pane_mut(&mut self) -> &mut Preview {
+        if let PaneState::Preview(pane) = self.pane_grid_state.get_mut(&self.preview_pane).unwrap() {
             pane
         } else {
             unreachable!()
         }
     }
-    fn get_log_pane(&mut self) -> &mut LogPane {
+    fn get_log_pane_mut(&mut self) -> &mut LogPane {
         if let PaneState::LogPane(pane) = self.pane_grid_state.get_mut(&self.log_pane).unwrap() {
             pane
         } else {
@@ -771,23 +657,19 @@ impl App {
         }
     }
     fn log(&mut self, message: &str) {
-        self.get_log_pane().log(message);
+        self.get_log_pane_mut().log(message);
     }
     fn set_busy(&mut self, busy: bool) {
         self.busy = busy;
-        self.get_demo_list_pane().busy = busy;
-        self.get_filters_pane().busy = busy;
-        self.get_settings_pane().busy = busy;
+        self.get_demo_list_pane_mut().busy = busy;
+        self.get_filters_pane_mut().busy = busy;
+        self.get_settings_pane_mut().busy = busy;
         // self.get_preview_pane().busy = busy;
         // self.get_log_pane().busy = busy;
     }
     fn show_stats(&mut self) {
         let demo_list = self.get_demo_list_pane();
-        let death_count: usize = demo_list
-            .demo_files
-            .iter()
-            .map(|demo_file| demo_file.heatmap_analysis.deaths.len())
-            .sum();
+        let death_count: usize = demo_list.demo_files.iter().map(|demo_file| demo_file.heatmap_analysis.deaths.len()).sum();
         let demo_count = demo_list.demo_files.len();
         self.log(&format!(
             "Stats: {} death{}, {} demo{}",
@@ -804,33 +686,21 @@ impl App {
             None => return,
         };
         let settings_pane = self.get_settings_pane();
-        if let (Some(pos_x), Some(pos_y), Some(scale)) = (
-            settings_pane.x_pos,
-            settings_pane.y_pos,
-            settings_pane.scale,
-        ) {
+        if let (Some(pos_x), Some(pos_y), Some(scale)) = (settings_pane.x_pos, settings_pane.y_pos, settings_pane.scale) {
             let coords_type = settings_pane.coords_type;
             let heatmap_type = settings_pane.heatmap_type;
             let screen_width = image.width();
             let screen_height = image.height();
+            let filters = &self.get_filters_pane().filters;
             let demo_list = self.get_demo_list_pane();
             let deaths = demo_list
                 .demo_files
                 .iter()
                 .map(|demo_file| demo_file.heatmap_analysis.deaths.iter())
-                .flatten();
-            let heatmap_generation_output = coldmaps::generate_heatmap(
-                heatmap_type,
-                deaths,
-                image,
-                screen_width,
-                screen_height,
-                pos_x,
-                pos_y,
-                scale,
-                coords_type,
-            );
-            match &mut self.get_preview_pane().heatmap_image {
+                .flatten()
+                .filter(|death| filters.iter().all(|filter| filter.apply(death)));
+            let heatmap_generation_output = coldmaps::generate_heatmap(heatmap_type, deaths, image, screen_width, screen_height, pos_x, pos_y, scale, coords_type);
+            match &mut self.get_preview_pane_mut().heatmap_image {
                 Some(heatmap_image) => {
                     heatmap_image.handle = image_to_handle(&heatmap_generation_output);
                     heatmap_image.image_with_heatmap_overlay = heatmap_generation_output;
@@ -845,39 +715,29 @@ fn image_to_handle(image: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Handle {
     Handle::from_pixels(
         image.width(),
         image.height(),
-        image.pixels().fold(
-            Vec::with_capacity((image.width() * image.height() * 4) as usize),
-            |mut acc, pixel| {
-                if let [r, g, b] = pixel.channels() {
-                    acc.push(*b);
-                    acc.push(*g);
-                    acc.push(*r);
-                    acc.push(255);
-                    acc
-                } else {
-                    unreachable!()
-                }
-            },
-        ),
+        image.pixels().fold(Vec::with_capacity((image.width() * image.height() * 4) as usize), |mut acc, pixel| {
+            if let [r, g, b] = pixel.channels() {
+                acc.push(*b);
+                acc.push(*g);
+                acc.push(*r);
+                acc.push(255);
+                acc
+            } else {
+                unreachable!()
+            }
+        }),
     )
 }
 
 async fn process_demos_async<'a>(inputs: Vec<PathBuf>) -> TimedResult<Vec<DemoProcessingOutput>> {
     let chrono = Instant::now();
-    let result = tokio::task::spawn_blocking(move || coldmaps::process_demos(inputs))
-        .await
-        .unwrap();
+    let result = tokio::task::spawn_blocking(move || coldmaps::process_demos(inputs)).await.unwrap();
     let time_elapsed = chrono.elapsed().as_secs_f32();
-    TimedResult {
-        result,
-        time_elapsed,
-    }
+    TimedResult { result, time_elapsed }
 }
 
 async fn open_save_dialog() -> Option<PathBuf> {
-    if let Ok(Ok(nfd2::Response::Okay(path))) =
-        tokio::task::spawn_blocking(move || nfd2::open_save_dialog(None, None)).await
-    {
+    if let Ok(Ok(nfd2::Response::Okay(path))) = tokio::task::spawn_blocking(move || nfd2::open_save_dialog(None, None)).await {
         return Some(path);
     }
     None

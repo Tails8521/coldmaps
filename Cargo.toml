@@ -20,6 +20,7 @@ tokio = { version = "0.2", features = ["blocking"] }
 rayon = "1.4.0"
 nfd2 = "=0.2.1"
 line_drawing = "=0.8.0"
+enum_dispatch = "=0.3.3"
 
 # [profile.release]
 # lto = true

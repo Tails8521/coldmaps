@@ -1,3 +1,4 @@
+pub mod filters;
 pub mod heatmap;
 pub mod heatmap_analyser;
 
@@ -32,19 +33,16 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
             };
             let demo = Demo::new(file);
             let heatmap_analysis = Default::default();
-            let error = DemoParser::new_with_analyser(
-                demo.get_stream(),
-                HeatmapAnalyser::new(Rc::clone(&heatmap_analysis)),
-            )
-            .parse()
-            .map_err(|_err| {
-                format!(
-                    "{}: Demo is corrupted, could only analyse up to tick {}",
-                    path.to_string_lossy(),
-                    heatmap_analysis.borrow().end_tick
-                )
-            })
-            .err();
+            let error = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::new(Rc::clone(&heatmap_analysis)))
+                .parse()
+                .map_err(|_err| {
+                    format!(
+                        "{}: Demo is corrupted, could only analyse up to tick {}",
+                        path.to_string_lossy(),
+                        heatmap_analysis.borrow().end_tick
+                    )
+                })
+                .err();
             DemoProcessingOutput {
                 path: path.clone(),
                 heatmap_analysis: Some(Rc::try_unwrap(heatmap_analysis).unwrap().into_inner()),
@@ -65,14 +63,7 @@ pub fn generate_heatmap<'a>(
     scale: f32,
     coords_type: CoordsType,
 ) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
-    let heatmap_generator = heatmap::HeatMapGenerator::new(
-        pos_x,
-        pos_y,
-        screen_width,
-        screen_height,
-        scale,
-        coords_type,
-    );
+    let heatmap_generator = heatmap::HeatMapGenerator::new(pos_x, pos_y, screen_width, screen_height, scale, coords_type);
     heatmap_generator.generate_heatmap(heatmap_type, deaths, &mut image);
     image
 }

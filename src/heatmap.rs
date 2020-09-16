@@ -99,7 +99,6 @@ impl HeatMapGenerator {
             let line_gradient = Gradient::new(vec![
                 LinSrgba::new(0.0, 0.0, 1.0, 1.0),
                 LinSrgba::new(1.0, 1.0, 0.0, 1.0),
-
                 // LinSrgba::new(0.0, 0.6, 1.0, 1.0),
                 // LinSrgba::new(0.067, 0.8, 1.0, 1.0),
                 // LinSrgba::new(0.33, 1.0, 0.33, 1.0),

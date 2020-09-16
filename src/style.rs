@@ -392,3 +392,53 @@ mod error {
         }
     }
 }
+
+pub enum ActiveButtonHighlight {
+    Highlighted,
+    NotHighlighted,
+}
+
+impl From<ActiveButtonHighlight> for Box<dyn button::StyleSheet> {
+    fn from(highlight: ActiveButtonHighlight) -> Self {
+        match highlight {
+            ActiveButtonHighlight::Highlighted => highlighted::Button.into(),
+            ActiveButtonHighlight::NotHighlighted => not_highlighted::Button.into(),
+        }
+    }
+}
+
+mod highlighted {
+    use iced::{button, Background, Color};
+
+    const ACTIVE: Color = Color::from_rgb(0x72 as f32 / 255.0, 0x89 as f32 / 255.0, 0xDA as f32 / 255.0);
+
+    pub struct Button;
+    impl button::StyleSheet for Button {
+        fn active(&self) -> button::Style {
+            button::Style {
+                background: Some(Background::Color(ACTIVE)),
+                border_radius: 3,
+                text_color: Color::WHITE,
+                ..button::Style::default()
+            }
+        }
+    }
+}
+
+mod not_highlighted {
+    use iced::{button, Background, Color};
+
+    const INACTIVE: Color = Color::from_rgb(0x80 as f32 / 255.0, 0x80 as f32 / 255.0, 0x80 as f32 / 255.0);
+
+    pub struct Button;
+    impl button::StyleSheet for Button {
+        fn active(&self) -> button::Style {
+            button::Style {
+                background: Some(Background::Color(INACTIVE)),
+                border_radius: 3,
+                text_color: Color::WHITE,
+                ..button::Style::default()
+            }
+        }
+    }
+}

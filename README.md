@@ -15,9 +15,9 @@ Tip: You can use setpos \<x> \<y> \<z> to position yourself accurately
 3: Drag and drop the screenshot over the program's window  
 4: Drag and drop the demo(s) you want to use for the heatmap  
 5: Fill the camera coordinates and zoom level, don't forget to tick the checkbox corresponding to what type of coordinates you used (cl_showpos or the console)  
-6: Click on the "Process demos" button to begin the demo analysis, once it has completed, you can click on the "Generate heatmap" and the heatmap should appear in the preview pane  
-7: The "Export image" button lets you export the heatmap as an image file
+6: The "Export image" button lets you export the heatmap as an image file
 
 # How to build
 
+(This step is only needed if you want to build from source, if you're on Windows you can simply download a pre-built exe from the [releases page](https://github.com/Tails8521/coldmaps/releases))  
 Download and install [Rust](https://www.rust-lang.org/learn/get-started) then `cargo build` or `cargo build --release`

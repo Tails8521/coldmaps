@@ -1,9 +1,11 @@
 use coldmaps::*;
+mod gui_filters;
 mod style;
 
-use filters::{Filter, FilterTrait};
+use filters::{FilterTrait, OrderedOperator, Property, PropertyOperator};
+use gui_filters::{FilterType, FiltersPane};
 use heatmap::{CoordsType, HeatmapType};
-use heatmap_analyser::HeatmapAnalysis;
+use heatmap_analyser::{HeatmapAnalysis, Team};
 use iced::{
     button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application, Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image,
     Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput,
@@ -84,6 +86,16 @@ enum Message {
     ExportImagePressed,
     ImageNameSelected(Option<PathBuf>),
     EndOfDemoFilesDrop(()),
+    AddFilter,
+    FilterSelected(usize, FilterType),
+    ClassIconClicked(usize, usize),
+    BluTeamClicked(usize),
+    RedTeamClicked(usize),
+    OrderedOperatorSelected(usize, OrderedOperator),
+    PropertyOperatorSelected(usize, PropertyOperator),
+    PropertySelected(usize, Property),
+    FilterTextInputChanged(usize, String),
+    FilterRemoved(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -152,44 +164,6 @@ impl DemoList {
         let demos_scroll = Scrollable::new(&mut self.scroll_state).push(demos_list).width(Length::Fill).height(Length::Fill);
 
         let result_container = Container::new(demos_scroll)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x()
-            .center_y()
-            .padding(10)
-            .style(style);
-
-        Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
-    }
-}
-
-#[derive(Default)]
-struct FiltersPane {
-    theme: style::Theme,
-    busy: bool,
-    filters: Vec<Filter>, // TODO
-}
-
-impl FiltersPane {
-    fn view(&mut self) -> Element<Message> {
-        let (filters, style): (Element<_>, _) = if self.filters.is_empty() {
-            (
-                Container::new(
-                    Text::new("Filters will go here")
-                        .width(Length::Fill)
-                        .size(20)
-                        .horizontal_alignment(HorizontalAlignment::Center),
-                )
-                .width(Length::Fill)
-                .center_y()
-                .into(),
-                style::ResultContainer::Ok,
-            )
-        } else {
-            todo!()
-        };
-
-        let result_container = Container::new(filters)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()
@@ -377,9 +351,9 @@ impl Application for App {
         let (filters_pane, demos_filter_split) = pane_grid_state.split(Axis::Horizontal, &demos_pane, PaneState::FiltersPane(Default::default())).unwrap();
         let (settings_pane, filters_settings_split) = pane_grid_state.split(Axis::Horizontal, &filters_pane, PaneState::SettingsPane(Default::default())).unwrap();
         let (log_pane, preview_log_split) = pane_grid_state.split(Axis::Horizontal, &preview_pane, PaneState::LogPane(Default::default())).unwrap();
-        pane_grid_state.resize(&demos_preview_split, 0.15);
-        pane_grid_state.resize(&demos_filter_split, 0.3);
-        pane_grid_state.resize(&filters_settings_split, 0.1);
+        pane_grid_state.resize(&demos_preview_split, 0.397);
+        pane_grid_state.resize(&demos_filter_split, 0.18);
+        pane_grid_state.resize(&filters_settings_split, 0.294);
         pane_grid_state.resize(&preview_log_split, 0.8);
         (
             App {
@@ -559,6 +533,62 @@ impl Application for App {
                     }
                 }
             }
+            Message::FilterSelected(index, selected) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.selected_filter = selected;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::AddFilter => {
+                self.get_filters_pane_mut().filters.push(Default::default());
+            }
+            Message::ClassIconClicked(index, class_index) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                let button_active = &mut filter_row.class_buttons_selected[class_index];
+                *button_active = !*button_active;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::BluTeamClicked(index) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.team_button_selected = Team::Blue;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::RedTeamClicked(index) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.team_button_selected = Team::Red;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::OrderedOperatorSelected(index, selected) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.selected_ordered_operator = selected;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::PropertyOperatorSelected(index, selected) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.selected_property_operator = selected;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::PropertySelected(index, selected) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.selected_property = selected;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::FilterTextInputChanged(index, text_input) => {
+                let filter_row = &mut self.get_filters_pane_mut().filters[index];
+                filter_row.text_input = text_input;
+                filter_row.filter = filter_row.try_generate_filter();
+                self.try_generate_heatmap();
+            }
+            Message::FilterRemoved(index) => {
+                self.get_filters_pane_mut().filters.remove(index);
+                self.try_generate_heatmap();
+            }
         };
 
         Command::none()
@@ -691,7 +721,7 @@ impl App {
             let heatmap_type = settings_pane.heatmap_type;
             let screen_width = image.width();
             let screen_height = image.height();
-            let filters = &self.get_filters_pane().filters;
+            let filters: Vec<_> = self.get_filters_pane().filters.iter().filter_map(|filter_row| filter_row.filter.as_ref()).collect();
             let demo_list = self.get_demo_list_pane();
             let deaths = demo_list
                 .demo_files

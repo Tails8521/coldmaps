@@ -76,7 +76,7 @@ pub enum Class {
     Other = 0,
     Scout = 1,
     Sniper = 2,
-    Solder = 3,
+    Soldier = 3,
     Demoman = 4,
     Medic = 5,
     Heavy = 6,
@@ -215,10 +215,11 @@ pub struct Death {
     pub killer_entity: u32, // probably the projectile entity rather than the killer'sm unless it's hitscan?
     pub killer_entity_state: Option<PlayerEntity>,
     pub tick: u32,
+    pub round: u32,
 }
 
 impl Death {
-    pub fn from_event(event: &PlayerDeathEvent, tick: u32, users: &BTreeMap<UserId, UserInfo>) -> Self {
+    pub fn from_event(event: &PlayerDeathEvent, tick: u32, users: &BTreeMap<UserId, UserInfo>, round: u32) -> Self {
         let (assister, assister_steamid) = if event.assister < (16 * 1024) {
             let assister = UserId::from(event.assister);
             (Some(assister), Some(users.get(&assister).expect("Can't get assister").steam_id.clone()))
@@ -231,6 +232,7 @@ impl Death {
             assister,
             assister_steamid,
             tick,
+            round,
             killer,
             killer_steamid: users.get(&killer).expect("Can't get killer").steam_id.clone(),
             killer_entity: event.inflictor_ent_index,
@@ -455,7 +457,8 @@ impl HeatmapAnalyser {
         match event {
             GameEvent::PlayerDeath(event) => {
                 let mut state = self.state.borrow_mut();
-                let mut death = Death::from_event(event, tick, &state.users);
+                let round = state.rounds.len() as u32 + 1;
+                let mut death = Death::from_event(event, tick, &state.users, round);
                 let killer = state.users.get_mut(&death.killer).expect("got a kill from unknown user");
                 if death.killer_entity < MAX_PLAYER_ENTITY {
                     killer.entity_id = Some(EntityId::from(death.killer_entity));

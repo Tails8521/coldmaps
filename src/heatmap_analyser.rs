@@ -239,7 +239,11 @@ impl Death {
             round,
             killer,
             killer_steamid: users.get(&killer).expect("Can't get killer").steam_id.clone(),
-            killer_entity: event.inflictor_ent_index,
+            killer_entity: if event.attacker == 0 {
+                event.victim_ent_index // if world killed the player, count it as a suicide
+            } else {
+                event.inflictor_ent_index
+            },
             killer_entity_state: None,
             weapon: event.weapon.clone(),
             victim,

@@ -1,4 +1,4 @@
-use crate::heatmap_analyser::{Death, PlayerEntity, Team, PlayerState};
+use crate::heatmap_analyser::{Death, PlayerEntity, PlayerState, Team};
 use enum_dispatch::enum_dispatch;
 use std::fmt::Display;
 use tf_demo_parser::demo::vector::Vector;
@@ -75,10 +75,7 @@ pub enum Property {
 }
 
 impl Property {
-    pub const ALL: [Property; 2] = [
-        Property::Suicide,
-        Property::Posthumous,
-    ];
+    pub const ALL: [Property; 2] = [Property::Suicide, Property::Posthumous];
 }
 
 impl Default for Property {
@@ -295,9 +292,9 @@ impl FilterTrait for PropertyFilter {
         let ret = match self.property {
             Property::Suicide => death.killer == death.victim,
             Property::Posthumous => match death.killer_entity_state {
-                Some(PlayerEntity { state: PlayerState::Alive, .. } ) => false,
-                _ => true
-            }
+                Some(PlayerEntity { state: PlayerState::Alive, .. }) => false,
+                _ => true,
+            },
         };
         match self.op {
             PropertyOperator::IsPresent => ret,

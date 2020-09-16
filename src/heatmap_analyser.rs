@@ -226,7 +226,11 @@ impl Death {
         } else {
             (None, None)
         };
-        let killer = UserId::from(event.attacker);
+        let killer = UserId::from(if event.attacker == 0 {
+            event.user_id // if world killed the player, count it as a suicide
+        } else {
+            event.attacker
+        });
         let victim = UserId::from(event.user_id);
         Death {
             assister,

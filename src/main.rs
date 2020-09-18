@@ -484,6 +484,7 @@ impl Application for App {
                 let mut demo_count = 0;
                 let mut death_count = 0;
                 let demo_list = self.get_demo_list_pane_mut();
+                let mut errors = Vec::new();
                 for demo in timed_result.result.iter_mut() {
                     let demo = mem::take(demo);
                     demo_count += 1;
@@ -499,6 +500,12 @@ impl Application for App {
                         };
                         demo_list.demo_files.push(demo_file);
                     }
+                    if let Some(error) = demo.error {
+                        errors.push(error);
+                    }
+                }
+                for error in errors {
+                    self.log(&error);
                 }
                 self.log(&format!(
                     "Loaded {} death{} from {} demo{} in {:.2}s",

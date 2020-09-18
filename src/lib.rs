@@ -5,7 +5,7 @@ pub mod heatmap_analyser;
 use heatmap_analyser::{Death, HeatmapAnalyser, HeatmapAnalysis};
 use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
-use std::{fs, path::PathBuf, rc::Rc};
+use std::{fs, path::PathBuf};
 
 use heatmap::{CoordsType, HeatmapType};
 use tf_demo_parser::{Demo, DemoParser};
@@ -32,21 +32,31 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                 }
             };
             let demo = Demo::new(file);
-            let heatmap_analysis = Default::default();
-            let error = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::new(Rc::clone(&heatmap_analysis)))
-                .parse()
-                .map_err(|_err| {
-                    format!(
-                        "{}: Demo is corrupted, could only analyse up to tick {}",
-                        path.to_string_lossy(),
-                        heatmap_analysis.borrow().end_tick
-                    )
-                })
-                .err();
-            DemoProcessingOutput {
-                path: path.clone(),
-                heatmap_analysis: Some(Rc::try_unwrap(heatmap_analysis).unwrap().into_inner()),
-                error,
+            let (_header, mut ticker) = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::default()).ticker().unwrap();
+            loop {
+                match ticker.tick() {
+                    Ok(true) => continue,
+                    Ok(false) => {
+                        break DemoProcessingOutput {
+                            path: path.clone(),
+                            heatmap_analysis: Some(ticker.into_state()),
+                            error: None,
+                        }
+                    }
+                    Err(_err) => {
+                        let heatmap_analysis = ticker.into_state();
+                        let error = Some(format!(
+                            "{}: Demo is corrupted, could only analyse up to tick {}",
+                            path.to_string_lossy(),
+                            heatmap_analysis.end_tick
+                        ));
+                        break DemoProcessingOutput {
+                            path: path.clone(),
+                            heatmap_analysis: Some(heatmap_analysis),
+                            error,
+                        };
+                    }
+                };
             }
         })
         .collect()

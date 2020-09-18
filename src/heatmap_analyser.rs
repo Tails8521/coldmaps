@@ -3,12 +3,8 @@ use serde::{ser::SerializeMap, Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use std::ops::{Index, IndexMut};
 use std::str::FromStr;
-use std::{
-    cell::RefCell,
-    ops::{Index, IndexMut},
-    rc::Rc,
-};
 use tf_demo_parser::demo::gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent};
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
 use tf_demo_parser::demo::message::usermessage::{ChatMessageKind, SayText2Message, UserMessage};
@@ -279,7 +275,7 @@ pub struct World {
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HeatmapAnalyser {
-    state: Rc<RefCell<HeatmapAnalysis>>,
+    state: HeatmapAnalysis,
     user_id_map: HashMap<EntityId, UserId>,
     class_names: Vec<ServerClassName>, // indexed by ClassId
 }
@@ -317,8 +313,7 @@ pub struct PlayerEntity {
 }
 
 impl MessageHandler for HeatmapAnalyser {
-    // type Output = HeatmapAnalysis;
-    type Output = ();
+    type Output = HeatmapAnalysis;
 
     fn does_handle(message_type: MessageType) -> bool {
         match message_type {
@@ -328,12 +323,12 @@ impl MessageHandler for HeatmapAnalyser {
     }
 
     fn handle_message(&mut self, message: &Message, tick: u32) {
-        if self.state.borrow().start_tick == 0 {
-            self.state.borrow_mut().start_tick = tick;
+        if self.state.start_tick == 0 {
+            self.state.start_tick = tick;
         }
-        self.state.borrow_mut().end_tick = tick;
+        self.state.end_tick = tick;
         match message {
-            Message::ServerInfo(message) => self.state.borrow_mut().interval_per_tick = message.interval_per_tick,
+            Message::ServerInfo(message) => self.state.interval_per_tick = message.interval_per_tick,
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
             Message::UserMessage(message) => self.handle_user_message(&message, tick),
             Message::PacketEntities(message) => {
@@ -359,15 +354,11 @@ impl MessageHandler for HeatmapAnalyser {
     }
 
     fn into_output(self, _state: &ParserState) -> Self::Output {
-        ()
+        self.state
     }
 }
 
 impl HeatmapAnalyser {
-    pub fn new(state: Rc<RefCell<HeatmapAnalysis>>) -> Self {
-        Self { state, ..Default::default() }
-    }
-
     pub fn handle_entity(&mut self, entity: &PacketEntity) {
         let class_name: &str = self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or("");
         match class_name {
@@ -382,7 +373,7 @@ impl HeatmapAnalyser {
         for prop in &entity.props {
             if let Ok(player_id) = u32::from_str(prop.definition.name.as_str()) {
                 let entity_id = EntityId::from(player_id);
-                if let Some(player) = self.state.borrow_mut().player_entities.iter_mut().find(|player| player.entity == entity_id) {
+                if let Some(player) = self.state.player_entities.iter_mut().find(|player| player.entity == entity_id) {
                     match prop.definition.owner_table.as_str() {
                         "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
                         "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
@@ -395,8 +386,7 @@ impl HeatmapAnalyser {
     }
 
     pub fn handle_player_entity(&mut self, entity: &PacketEntity) {
-        let mut state = self.state.borrow_mut();
-        let player = state.get_or_create_player_entity(entity.entity_index);
+        let player = self.state.get_or_create_player_entity(entity.entity_index);
 
         for prop in &entity.props {
             match prop.definition.owner_table.as_str() {
@@ -434,7 +424,7 @@ impl HeatmapAnalyser {
             }),
         ) = (entity.get_prop_by_name("DT_WORLD", "m_WorldMins"), entity.get_prop_by_name("DT_WORLD", "m_WorldMaxs"))
         {
-            self.state.borrow_mut().world = Some(World {
+            self.state.world = Some(World {
                 boundary_min: boundary_min.clone(),
                 boundary_max: boundary_max.clone(),
             })
@@ -448,13 +438,13 @@ impl HeatmapAnalyser {
                     self.change_name(from, text_message.text.clone());
                 }
             } else {
-                self.state.borrow_mut().chat.push(ChatMassage::from_message(text_message, tick));
+                self.state.chat.push(ChatMassage::from_message(text_message, tick));
             }
         }
     }
 
     fn change_name(&mut self, from: String, to: String) {
-        if let Some(user) = self.state.borrow_mut().users.values_mut().find(|user| user.name == from) {
+        if let Some(user) = self.state.users.values_mut().find(|user| user.name == from) {
             user.name = to;
         }
     }
@@ -464,35 +454,34 @@ impl HeatmapAnalyser {
 
         match event {
             GameEvent::PlayerDeath(event) => {
-                let mut state = self.state.borrow_mut();
-                let round = state.rounds.len() as u32 + 1;
-                let mut death = Death::from_event(event, tick, &state.users, round);
-                let killer = state.users.get_mut(&death.killer).expect("got a kill from unknown user");
+                let round = self.state.rounds.len() as u32 + 1;
+                let mut death = Death::from_event(event, tick, &self.state.users, round);
+                let killer = self.state.users.get_mut(&death.killer).expect("got a kill from unknown user");
                 if death.killer_entity < MAX_PLAYER_ENTITY {
                     killer.entity_id = Some(EntityId::from(death.killer_entity));
                 }
                 if let Some(killer_entity) = killer.entity_id {
-                    death.killer_entity_state = Some(state.get_or_create_player_entity(killer_entity).clone());
+                    death.killer_entity_state = Some(self.state.get_or_create_player_entity(killer_entity).clone());
                 }
-                let victim = state.users.get_mut(&death.victim).expect("got a kill on unknown user");
+                let victim = self.state.users.get_mut(&death.victim).expect("got a kill on unknown user");
                 if death.victim_entity < MAX_PLAYER_ENTITY {
                     victim.entity_id = Some(EntityId::from(death.victim_entity));
                 }
                 if let Some(victim_entity) = victim.entity_id {
-                    death.victim_entity_state = Some(state.get_or_create_player_entity(victim_entity).clone());
+                    death.victim_entity_state = Some(self.state.get_or_create_player_entity(victim_entity).clone());
                 }
-                state.deaths.push(death);
+                self.state.deaths.push(death);
             }
             GameEvent::PlayerSpawn(event) => {
                 let spawn = Spawn::from_event(event, tick);
-                if let Some(user_state) = self.state.borrow_mut().users.get_mut(&spawn.user) {
+                if let Some(user_state) = self.state.users.get_mut(&spawn.user) {
                     user_state.classes[spawn.class] += 1;
                     user_state.team = spawn.team;
                 }
             }
             GameEvent::TeamPlayRoundWin(event) => {
                 if event.win_reason != WIN_REASON_TIME_LIMIT {
-                    self.state.borrow_mut().rounds.push(Round::from_event(event, tick))
+                    self.state.rounds.push(Round::from_event(event, tick))
                 }
             }
             _ => {}
@@ -513,7 +502,6 @@ impl HeatmapAnalyser {
 
             if !steam_id.is_empty() {
                 self.state
-                    .borrow_mut()
                     .users
                     .entry(user_id)
                     .and_modify(|info| {

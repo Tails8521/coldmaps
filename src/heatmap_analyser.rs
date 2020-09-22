@@ -14,7 +14,7 @@ use tf_demo_parser::demo::packet::{
     stringtable::StringTableEntry,
 };
 use tf_demo_parser::demo::{
-    parser::MessageHandler,
+    parser::handler::{BorrowMessageHandler, MessageHandler},
     sendprop::{SendProp, SendPropValue},
     vector::{Vector, VectorXY},
 };
@@ -273,9 +273,9 @@ pub struct World {
     boundary_max: Vector,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HeatmapAnalyser {
-    state: HeatmapAnalysis,
+    pub state: HeatmapAnalysis,
     user_id_map: HashMap<EntityId, UserId>,
     class_names: Vec<ServerClassName>, // indexed by ClassId
 }
@@ -326,7 +326,7 @@ impl MessageHandler for HeatmapAnalyser {
         if self.state.start_tick == 0 {
             self.state.start_tick = tick;
         }
-        self.state.end_tick = tick;
+        self.state.current_tick = tick;
         match message {
             Message::ServerInfo(message) => self.state.interval_per_tick = message.interval_per_tick,
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
@@ -336,7 +336,7 @@ impl MessageHandler for HeatmapAnalyser {
                     self.handle_entity(entity);
                 }
             }
-            _ => {}
+            _ => unreachable!(),
         }
     }
 
@@ -355,6 +355,12 @@ impl MessageHandler for HeatmapAnalyser {
 
     fn into_output(self, _state: &ParserState) -> Self::Output {
         self.state
+    }
+}
+
+impl BorrowMessageHandler for HeatmapAnalyser {
+    fn borrow_output(&self, _state: &ParserState) -> &Self::Output {
+        &self.state
     }
 }
 
@@ -527,13 +533,13 @@ impl HeatmapAnalyser {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HeatmapAnalysis {
+    pub start_tick: u32,
+    pub current_tick: u32,
+    pub interval_per_tick: f32,
     pub chat: Vec<ChatMassage>,
     pub users: BTreeMap<UserId, UserInfo>,
     pub deaths: Vec<Death>,
     pub rounds: Vec<Round>,
-    pub start_tick: u32,
-    pub end_tick: u32,
-    pub interval_per_tick: f32,
 
     pub player_entities: Vec<PlayerEntity>,
     pub world: Option<World>,
@@ -559,7 +565,7 @@ impl Default for HeatmapAnalysis {
             deaths: Default::default(),
             rounds: Default::default(),
             start_tick: Default::default(),
-            end_tick: Default::default(),
+            current_tick: Default::default(),
             interval_per_tick: Default::default(),
             player_entities: {
                 let mut player_entities = Vec::new();

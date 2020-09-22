@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "coldmaps"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "enum_dispatch",
  "iced",
@@ -2538,7 +2538,7 @@ dependencies = [
 [[package]]
 name = "tf-demo-parser"
 version = "0.1.0"
-source = "git+https://github.com/demostf/parser?rev=e196b7bfcc3a8b2d24d95f92f9f5660d377cfff0#e196b7bfcc3a8b2d24d95f92f9f5660d377cfff0"
+source = "git+https://github.com/Tails8521/parser?rev=52000d77c5c3729d9a3e3dc307b413372a3de837#52000d77c5c3729d9a3e3dc307b413372a3de837"
 dependencies = [
  "bitbuffer",
  "enumflags2",

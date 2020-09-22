@@ -48,7 +48,7 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                         let error = Some(format!(
                             "{}: Demo is corrupted, could only analyse up to tick {}",
                             path.to_string_lossy(),
-                            heatmap_analysis.end_tick
+                            heatmap_analysis.current_tick
                         ));
                         break DemoProcessingOutput {
                             path: path.clone(),

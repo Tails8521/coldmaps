@@ -1,4 +1,5 @@
 use coldmaps::*;
+mod demo_player;
 mod gui_filters;
 mod style;
 
@@ -34,6 +35,13 @@ fn delete_icon() -> Text {
 }
 
 pub fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(arg) = args.get(1) {
+        if arg == "--demoplayer" {
+            demo_player::run().unwrap();
+            return;
+        }
+    }
     App::run(Settings {
         antialiasing: true,
         window: window::Settings {

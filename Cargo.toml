@@ -1,11 +1,11 @@
 [package]
 name = "coldmaps"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Tails8521 <tails8521@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tf-demo-parser = { git = "https://github.com/demostf/parser", rev = "e196b7bfcc3a8b2d24d95f92f9f5660d377cfff0" }
+tf-demo-parser = { git = "https://github.com/Tails8521/parser", rev = "52000d77c5c3729d9a3e3dc307b413372a3de837" }
 serde = { version = "=1.0.114", features = ["derive"] }
 serde_json = "=1.0.56"
 serde_repr = "=0.1.6"

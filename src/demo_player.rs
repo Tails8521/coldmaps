@@ -10,7 +10,7 @@ use std::{
     path::PathBuf,
 };
 
-use coldmaps::heatmap_analyser::{Class, ClassList, HeatmapAnalyser, HeatmapAnalysis, PlayerEntity, PlayerState, Spawn, Team, UserId, UserInfo};
+use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerEntity, PlayerState, Spawn, Team, UserId, UserInfo};
 use serde::Serialize;
 use tf_demo_parser::{
     demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::Message,
@@ -546,7 +546,6 @@ impl DemoAnalyzer {
             GameEvent::PlayerSpawn(event) => {
                 let spawn = Spawn::from_event(event, tick);
                 if let Some(user_state) = self.state.users.get_mut(&spawn.user) {
-                    user_state.classes[spawn.class] += 1;
                     user_state.team = spawn.team;
                 }
             }
@@ -576,7 +575,6 @@ impl DemoAnalyzer {
                         }
                     })
                     .or_insert_with(|| UserInfo {
-                        classes: ClassList::default(),
                         team: Team::Other,
                         steam_id,
                         user_id,

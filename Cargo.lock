@@ -310,7 +310,6 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "serde_repr",
  "tf-demo-parser",
  "tokio",
 ]

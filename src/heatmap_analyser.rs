@@ -1,9 +1,7 @@
 use num_enum::TryFromPrimitive;
-use serde::{ser::SerializeMap, Deserialize, Serialize, Serializer};
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
-use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 use tf_demo_parser::demo::gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent};
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
@@ -66,7 +64,7 @@ impl Default for Team {
     }
 }
 
-#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, Copy, PartialEq, Eq, Hash, TryFromPrimitive)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Class {
     Other = 0,
@@ -93,55 +91,6 @@ impl Class {
 impl Default for Class {
     fn default() -> Self {
         Class::Other
-    }
-}
-
-#[derive(Default, Debug, Eq, PartialEq, Deserialize, Clone)]
-#[serde(from = "HashMap<Class, u8>")]
-pub struct ClassList([u8; 10]);
-
-impl Index<Class> for ClassList {
-    type Output = u8;
-
-    #[cfg_attr(feature = "no-panic", no_panic::no_panic)]
-    fn index(&self, class: Class) -> &Self::Output {
-        &self.0[class as u8 as usize]
-    }
-}
-
-impl IndexMut<Class> for ClassList {
-    #[cfg_attr(feature = "no-panic", no_panic::no_panic)]
-    fn index_mut(&mut self, class: Class) -> &mut Self::Output {
-        &mut self.0[class as u8 as usize]
-    }
-}
-
-impl Serialize for ClassList {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let count = self.0.iter().filter(|c| **c > 0).count();
-        let mut classes = serializer.serialize_map(Some(count))?;
-        for (class, count) in self.0.iter().copied().enumerate() {
-            if count > 0 {
-                classes.serialize_entry(&class, &count)?;
-            }
-        }
-
-        classes.end()
-    }
-}
-
-impl From<HashMap<Class, u8>> for ClassList {
-    fn from(map: HashMap<Class, u8>) -> Self {
-        let mut classes = ClassList::default();
-
-        for (class, count) in map.into_iter() {
-            classes[class] = count;
-        }
-
-        classes
     }
 }
 
@@ -182,7 +131,6 @@ impl Spawn {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
-    pub classes: ClassList,
     pub name: String,
     pub user_id: UserId,
     pub steam_id: String,
@@ -192,7 +140,7 @@ pub struct UserInfo {
 
 impl PartialEq for UserInfo {
     fn eq(&self, other: &UserInfo) -> bool {
-        self.classes == other.classes && self.name == other.name && self.user_id == other.user_id && self.steam_id == other.steam_id && self.team == other.team
+        self.name == other.name && self.user_id == other.user_id && self.steam_id == other.steam_id && self.team == other.team
     }
 }
 
@@ -480,7 +428,6 @@ impl HeatmapAnalyser {
             GameEvent::PlayerSpawn(event) => {
                 let spawn = Spawn::from_event(event, tick);
                 if let Some(user_state) = self.state.users.get_mut(&spawn.user) {
-                    user_state.classes[spawn.class] += 1;
                     user_state.team = spawn.team;
                 }
             }
@@ -515,7 +462,6 @@ impl HeatmapAnalyser {
                         }
                     })
                     .or_insert_with(|| UserInfo {
-                        classes: ClassList::default(),
                         team: Team::Other,
                         steam_id,
                         user_id,
@@ -551,7 +497,6 @@ impl Default for HeatmapAnalysis {
             users: {
                 let mut users = BTreeMap::new();
                 let world = UserInfo {
-                    classes: ClassList::default(),
                     entity_id: Some(EntityId::from(0)),
                     name: "world".into(),
                     user_id: UserId::from(0u32),

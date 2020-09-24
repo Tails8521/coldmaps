@@ -186,7 +186,6 @@ pub struct UserInfo {
     pub name: String,
     pub user_id: UserId,
     pub steam_id: String,
-    #[serde(skip)]
     pub entity_id: Option<EntityId>,
     pub team: Team,
 }
@@ -301,7 +300,7 @@ impl PlayerState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PlayerEntity {
-    entity: EntityId,
+    pub entity: EntityId,
     pub position: Vector,
     pub health: u16,
     pub max_health: u16,

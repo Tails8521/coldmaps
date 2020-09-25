@@ -40,13 +40,12 @@ impl ChatMassage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash, TryFromPrimitive)]
-#[serde(rename_all = "lowercase")]
 #[repr(u8)]
 pub enum Team {
     Other = 0,
     Spectator = 1,
     Red = 2,
-    Blue = 3,
+    Blu = 3,
 }
 
 impl Team {
@@ -129,7 +128,6 @@ impl Spawn {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub name: String,
     pub user_id: UserId,
@@ -476,7 +474,6 @@ impl HeatmapAnalyser {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub struct HeatmapAnalysis {
     pub start_tick: u32,
     pub current_tick: u32,

@@ -191,7 +191,7 @@ impl FilterRow {
             FilterType::KillerTeamFilter | FilterType::VictimTeamFilter => {
                 let mut row = Row::new();
                 row = row.push(Button::new(&mut self.team_button_blu, Text::new("BLU")).on_press(Message::BluTeamClicked(index)).style(
-                    if self.team_button_selected == Team::Blue {
+                    if self.team_button_selected == Team::Blu {
                         ActiveButtonHighlight::Highlighted
                     } else {
                         ActiveButtonHighlight::NotHighlighted
@@ -336,7 +336,7 @@ impl FilterRow {
                 KillerTeamFilter {
                     team: match self.team_button_selected {
                         Team::Red => Team::Red,
-                        Team::Blue => Team::Blue,
+                        Team::Blu => Team::Blu,
                         _ => return None,
                     },
                 }
@@ -346,7 +346,7 @@ impl FilterRow {
                 VictimTeamFilter {
                     team: match self.team_button_selected {
                         Team::Red => Team::Red,
-                        Team::Blue => Team::Blue,
+                        Team::Blu => Team::Blu,
                         _ => return None,
                     },
                 }

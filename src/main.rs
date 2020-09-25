@@ -566,7 +566,7 @@ impl Application for App {
             }
             Message::BluTeamClicked(index) => {
                 let filter_row = &mut self.get_filters_pane_mut().filters[index];
-                filter_row.team_button_selected = Team::Blue;
+                filter_row.team_button_selected = Team::Blu;
                 filter_row.filter = filter_row.try_generate_filter();
                 self.try_generate_heatmap();
             }

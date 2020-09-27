@@ -439,6 +439,7 @@ impl DemoAnalysis {
 struct DemoAnalyzer {
     state: DemoAnalysis,
     class_names: Vec<ServerClassName>,
+    tick_offset: u32
 }
 
 impl MessageHandler for DemoAnalyzer {
@@ -456,7 +457,10 @@ impl MessageHandler for DemoAnalyzer {
     }
 
     fn handle_message(&mut self, message: &Message, tick: u32) {
-        self.state.current_tick = tick;
+        if self.tick_offset == 0 && tick != 0 {
+            self.tick_offset = tick - 1;
+        }
+        self.state.current_tick = tick - self.tick_offset; // first tick = start of the demo rather than map change
         match message {
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
             Message::PacketEntities(message) => {

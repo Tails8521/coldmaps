@@ -268,10 +268,10 @@ impl MessageHandler for HeatmapAnalyser {
     }
 
     fn handle_message(&mut self, message: &Message, tick: u32) {
-        if self.state.start_tick == 0 {
-            self.state.start_tick = tick;
+        if self.state.tick_offset == 0 && tick != 0 {
+            self.state.tick_offset = tick - 1;
         }
-        self.state.current_tick = tick;
+        self.state.current_tick = tick - self.state.tick_offset; // first tick = start of the demo rather than map change
         match message {
             Message::ServerInfo(message) => self.state.interval_per_tick = message.interval_per_tick,
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
@@ -475,7 +475,7 @@ impl HeatmapAnalyser {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HeatmapAnalysis {
-    pub start_tick: u32,
+    pub tick_offset: u32,
     pub current_tick: u32,
     pub interval_per_tick: f32,
     pub chat: Vec<ChatMassage>,
@@ -505,7 +505,7 @@ impl Default for HeatmapAnalysis {
             },
             deaths: Default::default(),
             rounds: Default::default(),
-            start_tick: Default::default(),
+            tick_offset: Default::default(),
             current_tick: Default::default(),
             interval_per_tick: Default::default(),
             player_entities: {

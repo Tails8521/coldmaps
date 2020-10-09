@@ -1,5 +1,7 @@
+mod weapons;
+
 use io::{BufRead, BufReader, BufWriter, LineWriter, StdoutLock};
-use std::str::FromStr;
+use std::{num::NonZeroU32, str::FromStr};
 use std::{
     borrow::Cow,
     collections::BTreeMap,
@@ -10,14 +12,15 @@ use std::{
     path::PathBuf,
 };
 
-use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerEntity, PlayerState, Spawn, Team, UserId, UserInfo};
+use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo};
 use serde::Serialize;
 use tf_demo_parser::{
-    demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::Message,
-    demo::packet::datatable::ParseSendTable, demo::packet::datatable::ServerClass, demo::packet::datatable::ServerClassName, demo::packet::stringtable::StringTableEntry,
-    demo::parser::handler::BorrowMessageHandler, demo::parser::DemoTicker, demo::parser::MessageHandler, demo::vector::Vector, demo::vector::VectorXY, Demo, DemoParser,
-    MessageType, ParseError, ParserState, ReadResult, Stream,
+    demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::packetentities::PVS,
+    demo::message::Message, demo::packet::datatable::ParseSendTable, demo::packet::datatable::ServerClass, demo::packet::datatable::ServerClassName,
+    demo::packet::stringtable::StringTableEntry, demo::parser::handler::BorrowMessageHandler, demo::parser::DemoTicker, demo::parser::MessageHandler, demo::vector::Vector,
+    demo::vector::VectorXY, Demo, DemoParser, MessageType, ParseError, ParserState, ReadResult, Stream,
 };
+use weapons::Weapon;
 
 const SECTION_SIZE: usize = 1024;
 
@@ -396,15 +399,69 @@ pub(crate) fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct PlayerEntity {
+    entity: EntityId,
+    position: Vector,
+    health: u16,
+    max_health: u16,
+    class: Class,
+    team: Team,
+    view_angle_horizontal: f32,
+    view_angle_vertical: f32,
+    state: PlayerState,
+    active_weapon: Option<NonZeroU32>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq)]
+struct ProjectileProperties {
+    crit: bool,
+    team: Team,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(tag = "type")]
+enum EntityContent {
+    Unknown,
+    Other {
+        class_name: String,
+    },
+    Pipe(ProjectileProperties),
+    Sticky(ProjectileProperties),
+    Rocket(ProjectileProperties),
+    TeamTrainWatcher {
+        total_progress: f32,
+        train_speed_level: i32,
+        num_cappers: i32,
+        recede_time: f32,
+    },
+    Cart,
+    Weapon { name: Weapon, id: i32, owner: Option<NonZeroU32> }
+}
+
+impl Default for EntityContent {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Default, Clone, Debug, Serialize, PartialEq)]
+struct OtherEntity {
+    entity_content: EntityContent,
+    position: Vector,
+    rotation: Vector,
+}
+
 #[derive(Default, Clone, Debug, Serialize, PartialEq)]
 struct DemoAnalysis {
     current_tick: u32,
     users: BTreeMap<UserId, UserInfo>,
     player_entities: Vec<PlayerEntity>,
+    other_entities: BTreeMap<EntityId, OtherEntity>,
 }
 
 impl DemoAnalysis {
-    pub fn get_or_create_player_entity(&mut self, entity_id: EntityId) -> &mut PlayerEntity {
+    fn get_or_create_player_entity(&mut self, entity_id: EntityId) -> &mut PlayerEntity {
         let index = match self
             .player_entities
             .iter_mut()
@@ -424,6 +481,7 @@ impl DemoAnalysis {
                     view_angle_horizontal: 0.0,
                     view_angle_vertical: 0.0,
                     state: PlayerState::Alive,
+                    active_weapon: None,
                 };
 
                 let index = self.player_entities.len();
@@ -439,7 +497,7 @@ impl DemoAnalysis {
 struct DemoAnalyzer {
     state: DemoAnalysis,
     class_names: Vec<ServerClassName>,
-    tick_offset: u32
+    tick_offset: u32,
 }
 
 impl MessageHandler for DemoAnalyzer {
@@ -465,10 +523,20 @@ impl MessageHandler for DemoAnalyzer {
             Message::GameEvent(message) => self.handle_event(&message.event, tick),
             Message::PacketEntities(message) => {
                 for entity in &message.entities {
-                    self.handle_entity(entity);
+                    if entity.pvs == PVS::Delete {
+                        let removed_entity = entity.entity_index;
+                        self.state.player_entities.retain(|player_entity| player_entity.entity != removed_entity);
+                        let _removed = self.state.other_entities.remove(&removed_entity);
+                    } else {
+                        self.handle_entity(entity);
+                    }
+                }
+                for removed_entity in &message.removed_entities {
+                    self.state.player_entities.retain(|player_entity| player_entity.entity != *removed_entity);
+                    let _removed = self.state.other_entities.remove(removed_entity);
                 }
             }
-            _ => unreachable!(),
+            _ => {}
         }
     }
 
@@ -498,11 +566,95 @@ impl DemoAnalyzer {
         match class_name {
             "CTFPlayer" => self.handle_player_entity(entity),
             "CTFPlayerResource" => self.handle_player_resource(entity),
-            _ => {}
+            "CTFGrenadePipebombProjectile" => self.handle_demo_projectile(entity),
+            "CTFProjectile_Rocket" => self.handle_rocket(entity),
+            "CTeamTrainWatcher" => self.handle_team_train_watcher(entity),
+            "CFuncTrackTrain" => self.handle_func_track_train(entity),
+            "CTFBat"
+            | "CTFBat_Fish"
+            | "CTFBat_Giftwrap"
+            | "CTFBat_Wood"
+            | "CTFBonesaw"
+            | "CTFBottle"
+            | "CTFBreakableMelee"
+            | "CTFBreakableSign"
+            | "CTFBuffItem"
+            | "CTFCannon"
+            | "CTFChargedSMG"
+            | "CTFCleaver"
+            | "CTFClub"
+            | "CTFCompoundBow"
+            | "CTFCrossbow"
+            | "CTFDRGPomson"
+            | "CTFFireAxe"
+            | "CTFFists"
+            | "CTFFlameThrower"
+            | "CTFFlareGun"
+            | "CTFFlareGun_Revenge"
+            | "CTFGrenadeLauncher"
+            | "CTFJar"
+            | "CTFJarGas"
+            | "CTFJarMilk"
+            | "CTFKatana"
+            | "CTFKnife"
+            | "CTFLaserPointer"
+            | "CTFLunchBox"
+            | "CTFLunchBox_Drink"
+            | "CTFMechanicalArm"
+            | "CTFMinigun"
+            | "CTFParachute"
+            | "CTFParachute_Primary"
+            | "CTFParachute_Secondary"
+            | "CTFParticleCannon"
+            | "CTFPEPBrawlerBlaster"
+            | "CTFPipebombLauncher"
+            | "CTFPistol"
+            | "CTFPistol_Scout"
+            | "CTFPistol_ScoutPrimary"
+            | "CTFPistol_ScoutSecondary"
+            | "CTFRevolver"
+            | "CTFRobotArm"
+            | "CTFRocketLauncher"
+            | "CTFRocketLauncher_AirStrike"
+            | "CTFRocketLauncher_DirectHit"
+            | "CTFRocketLauncher_Mortar"
+            | "CTFRocketPack"
+            | "CTFScatterGun"
+            | "CTFShotgun"
+            | "CTFShotgun_HWG"
+            | "CTFShotgun_Pyro"
+            | "CTFShotgun_Revenge"
+            | "CTFShotgun_Soldier"
+            | "CTFShotgunBuildingRescue"
+            | "CTFShovel"
+            | "CTFSlap"
+            | "CTFSMG"
+            | "CTFSniperRifle"
+            | "CTFSniperRifleClassic"
+            | "CTFSniperRifleDecap"
+            | "CTFSodaPopper"
+            | "CTFStickBomb"
+            | "CTFSword"
+            | "CTFSyringeGun"
+            | "CTFWeaponBuilder"
+            | "CTFWeaponPDA"
+            | "CTFWeaponPDA_Engineer_Build"
+            | "CTFWeaponPDA_Engineer_Destroy"
+            | "CTFWeaponPDA_Spy"
+            | "CTFWeaponSapper"
+            | "CTFWearableDemoShield"
+            | "CTFWearableRazorback"
+            | "CTFWearableRobotArm"
+            | "CTFWrench" => self.handle_weapon(entity),
+
+            _ => {
+                let class_name = class_name.into();
+                self.handle_unknown_entity(entity, class_name);
+            }
         }
     }
 
-    pub fn handle_player_resource(&mut self, entity: &PacketEntity) {
+    fn handle_player_resource(&mut self, entity: &PacketEntity) {
         for prop in &entity.props {
             if let Ok(player_id) = u32::from_str(prop.definition.name.as_str()) {
                 let entity_id = EntityId::from(player_id);
@@ -518,7 +670,7 @@ impl DemoAnalyzer {
         }
     }
 
-    pub fn handle_player_entity(&mut self, entity: &PacketEntity) {
+    fn handle_player_entity(&mut self, entity: &PacketEntity) {
         let player = self.state.get_or_create_player_entity(entity.entity_index);
 
         for prop in &entity.props {
@@ -527,6 +679,15 @@ impl DemoAnalyzer {
                     "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
                     "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
                     "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
+                    // "m_fFlags" => {
+                    //     match &prop.value {
+                    //         tf_demo_parser::demo::sendprop::SendPropValue::Integer(x) => {
+                    //             // TODO investigate, 1 = on ground, 2 = ducking, etc.
+                    //             eprintln!("{}", x);
+                    //         },
+                    //         _ => {}
+                    //     }
+                    // }
                     _ => {}
                 },
                 "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop.definition.name.as_str() {
@@ -540,9 +701,152 @@ impl DemoAnalyzer {
                     "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
                     _ => {}
                 },
+                "DT_BaseCombatCharacter" => match prop.definition.name.as_str() {
+                    "m_hActiveWeapon" => player.active_weapon = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
+                    _ => {}
+                }
                 _ => {}
             }
         }
+    }
+
+    fn handle_unknown_entity(&mut self, entity: &PacketEntity, class_name: String) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        entry.entity_content = EntityContent::Other { class_name };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_demo_projectile(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        let (mut itype, mut projectile_properties) = match entry.entity_content {
+            EntityContent::Pipe(projectile_properties) => (0, projectile_properties),
+            EntityContent::Sticky(projectile_properties) => (1, projectile_properties),
+            _ => (-1, Default::default()),
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_iType" => itype = i64::try_from(&prop.value).unwrap_or(-1),
+                "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
+                "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                // "m_hThrower" => eprintln!("Demo {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
+                _ => {}
+            }
+        }
+        entry.entity_content = match itype {
+            0 => EntityContent::Pipe(projectile_properties),
+            1 => EntityContent::Sticky(projectile_properties),
+            _ => EntityContent::Unknown, // TODO check for quickiebomb, scotres (DT_TFProjectile_Pipebomb::m_bDefensiveBomb?) etc.
+        }
+    }
+
+    fn handle_rocket(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        let mut projectile_properties = if let EntityContent::Rocket(projectile_properties) = entry.entity_content {
+            projectile_properties
+        } else {
+            Default::default()
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
+                "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                // "m_hOwnerEntity" => eprintln!("Soldier {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
+                _ => {}
+            }
+        }
+        entry.entity_content = EntityContent::Rocket(projectile_properties);
+    }
+
+    fn handle_team_train_watcher(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        let (mut total_progress, mut train_speed_level, mut num_cappers, mut recede_time) = if let EntityContent::TeamTrainWatcher {
+            total_progress,
+            train_speed_level,
+            num_cappers,
+            recede_time,
+        } = entry.entity_content
+        {
+            (total_progress, train_speed_level, num_cappers, recede_time)
+        } else {
+            Default::default()
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_flTotalProgress" => total_progress = f32::try_from(&prop.value).unwrap_or_default(),
+                "m_iTrainSpeedLevel" => train_speed_level = i64::try_from(&prop.value).unwrap_or_default() as i32,
+                "m_nNumCappers" => num_cappers = i64::try_from(&prop.value).unwrap_or_default() as i32,
+                "m_flRecedeTime" => recede_time = f32::try_from(&prop.value).unwrap_or_default(),
+                _ => {}
+            }
+        }
+        entry.entity_content = EntityContent::TeamTrainWatcher {
+            total_progress,
+            train_speed_level,
+            num_cappers,
+            recede_time,
+        };
+    }
+
+    fn handle_func_track_train(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                _ => {}
+            }
+        }
+        entry.entity_content = EntityContent::Cart;
+    }
+
+    fn handle_weapon(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
+            ..Default::default()
+        });
+        let (mut id, mut name, mut owner) = match entry.entity_content {
+            EntityContent::Weapon { name, id, owner } => (id, name, owner),
+            _ => (-1, Weapon::Unknown, None)
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                "moveparent" => owner = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
+                "m_iItemDefinitionIndex" => id = i64::try_from(&prop.value).unwrap_or(-1) as i32, // TODO: for some reason this is not always filled :(
+                _ => {}
+            }
+        }
+        if name == Weapon::Unknown {
+            name = weapons::index_to_weapon(id);
+        }
+        if name == Weapon::Unknown {
+            // eprintln!("Unknown weapon: {}, {}, owner: {:?}, {}", id, self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or(""), owner, entity.entity_index);
+            entry.entity_content = EntityContent::Other { class_name: self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or("").into() };
+            return;
+        }
+        entry.entity_content = EntityContent::Weapon { name, id, owner };
     }
 
     fn handle_event(&mut self, event: &GameEvent, tick: u32) {
@@ -589,4 +893,12 @@ impl DemoAnalyzer {
         }
         Ok(())
     }
+}
+
+fn handle_to_entity_index(handle: i64) -> Option<NonZeroU32> {
+    let ret = handle as u32 & 0b111_1111_1111; // The rest of the bits is probably some kind of generational index
+    if ret == 2047 {
+        return None
+    }
+    NonZeroU32::new(ret)
 }

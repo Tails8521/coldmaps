@@ -72,10 +72,11 @@ impl Display for PropertyOperator {
 pub enum Property {
     Suicide,
     Posthumous,
+    DuringRound
 }
 
 impl Property {
-    pub const ALL: [Property; 2] = [Property::Suicide, Property::Posthumous];
+    pub const ALL: [Property; 3] = [Property::Suicide, Property::Posthumous, Property::DuringRound];
 }
 
 impl Default for Property {
@@ -89,6 +90,7 @@ impl Display for Property {
         match self {
             Property::Suicide => write!(f, "Suicide"),
             Property::Posthumous => write!(f, "Posthumous"),
+            Property::DuringRound => write!(f, "During round"),
         }
     }
 }
@@ -295,6 +297,7 @@ impl FilterTrait for PropertyFilter {
                 Some(PlayerEntity { state: PlayerState::Alive, .. }) => false,
                 _ => true,
             },
+            Property::DuringRound => death.during_round
         };
         match self.op {
             PropertyOperator::IsPresent => ret,

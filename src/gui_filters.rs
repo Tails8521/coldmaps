@@ -105,8 +105,15 @@ impl Default for FiltersPane {
             ..Default::default()
         };
         no_suicides_by_default.filter = no_suicides_by_default.try_generate_filter();
+        let mut only_in_round_kills_by_default = FilterRow {
+            selected_filter: FilterType::PropertyFilter,
+            selected_property: Property::DuringRound,
+            selected_property_operator: PropertyOperator::IsPresent,
+            ..Default::default()
+        };
+        only_in_round_kills_by_default.filter = only_in_round_kills_by_default.try_generate_filter();
         Self {
-            filters: vec![no_suicides_by_default],
+            filters: vec![no_suicides_by_default, only_in_round_kills_by_default],
             theme: Default::default(),
             busy: Default::default(),
             scroll_state: Default::default(),

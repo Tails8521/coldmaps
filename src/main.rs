@@ -9,7 +9,7 @@ use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::{HeatmapAnalysis, Team};
 use iced::{
     button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application, Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image,
-    Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput,
+    Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput, Checkbox, Slider, slider,
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb};
 use pane_grid::{Axis, Pane};
@@ -90,6 +90,9 @@ enum Message {
     XPosInputChanged(String),
     YPosInputChanged(String),
     ScaleInputChanged(String),
+    AutoIntensityCheckboxToggled(bool),
+    IntensityChanged(f32),
+    RadiusChanged(f32),
     ProcessDemosDone(TimedResult<Vec<DemoProcessingOutput>>),
     ExportImagePressed,
     ImageNameSelected(Option<PathBuf>),
@@ -183,7 +186,6 @@ impl DemoList {
     }
 }
 
-#[derive(Default)]
 struct SettingsPane {
     theme: style::Theme,
     busy: bool,
@@ -201,6 +203,39 @@ struct SettingsPane {
     image_ready: bool,
     coords_type: CoordsType,
     heatmap_type: HeatmapType,
+    auto_intensity: bool,
+    intensity_state: slider::State,
+    intensity: f32,
+    radius_state: slider::State,
+    radius: f32,
+}
+
+impl Default for SettingsPane {
+    fn default() -> Self {
+        Self {
+            theme: Default::default(),
+            busy: Default::default(),
+            scroll_state: Default::default(),
+            x_pos_input_state: Default::default(),
+            x_pos_input: "0".into(),
+            x_pos: Some(0.0),
+            y_pos_input_state: Default::default(),
+            y_pos_input: "0".into(),
+            y_pos: Some(0.0),
+            scale_input_state: Default::default(),
+            scale_input: Default::default(),
+            scale: Default::default(),
+            export_image_button: Default::default(),
+            image_ready: Default::default(),
+            coords_type: Default::default(),
+            heatmap_type: Default::default(),
+            auto_intensity: true,
+            intensity_state: Default::default(),
+            intensity: 50.0,
+            radius_state: Default::default(),
+            radius: 50.0,
+        }
+    }
 }
 
 impl SettingsPane {
@@ -259,6 +294,26 @@ impl SettingsPane {
             CoordsType::ShowPos => "Camera coordinates (use cl_showpos)",
             CoordsType::Console => "Camera coordinates (use the console)",
         };
+
+        let mut heatmap_options = Column::new().spacing(10);
+        if self.heatmap_type != HeatmapType::Lines {
+            let intensity_text = if self.auto_intensity {
+                "Heatmap intensity: Auto".into()
+            } else {
+                format!("Heatmap intensity: {:.2}", self.intensity / 100.0)
+            };
+            let intensity_checkbox = Container::new(Checkbox::new(self.auto_intensity, "Auto", Message::AutoIntensityCheckboxToggled).style(self.theme)).align_x(Align::End).width(Length::Fill);
+            let intensity_label = Row::new().spacing(10).push(Text::new(&intensity_text)).push(intensity_checkbox);
+            heatmap_options = heatmap_options.push(intensity_label);
+            if !self.auto_intensity {
+                let intensity_slider = Slider::new(&mut self.intensity_state, 1.0..=100.0, self.intensity, Message::IntensityChanged).style(self.theme);
+                heatmap_options = heatmap_options.push(intensity_slider);
+            }
+            let radius_label = Row::new().spacing(10).push(Text::new(&format!("Heatmap radius: {:.1}", self.radius / 10.0)));
+            let radius_slider = Slider::new(&mut self.radius_state, 1.0..=100.0, self.radius, Message::RadiusChanged).style(self.theme);
+            heatmap_options = heatmap_options.push(radius_label).push(radius_slider);
+        }
+
         let settings_content: Element<_> = Column::new()
             .push(choose_heatmap_type)
             .push(Text::new(coords_label))
@@ -266,6 +321,7 @@ impl SettingsPane {
             .push(y_pos_border)
             .push(Text::new("cl_leveloverview scale"))
             .push(scale_border)
+            .push(heatmap_options)
             .push(export_image_button)
             .push(choose_coords_type)
             .push(choose_theme)
@@ -486,6 +542,21 @@ impl Application for App {
                     }
                 }
                 settings_pane.scale_input = input;
+                self.try_generate_heatmap();
+            }
+            Message::AutoIntensityCheckboxToggled(auto_intensity) => {
+                let settings_pane = self.get_settings_pane_mut();
+                settings_pane.auto_intensity = auto_intensity;
+                self.try_generate_heatmap();
+            }
+            Message::IntensityChanged(intensity) => {
+                let settings_pane = self.get_settings_pane_mut();
+                settings_pane.intensity = intensity;
+                self.try_generate_heatmap();
+            }
+            Message::RadiusChanged(radius) => {
+                let settings_pane = self.get_settings_pane_mut();
+                settings_pane.radius = radius;
                 self.try_generate_heatmap();
             }
             Message::ProcessDemosDone(mut timed_result) => {
@@ -734,6 +805,8 @@ impl App {
         if let (Some(pos_x), Some(pos_y), Some(scale)) = (settings_pane.x_pos, settings_pane.y_pos, settings_pane.scale) {
             let coords_type = settings_pane.coords_type;
             let heatmap_type = settings_pane.heatmap_type;
+            let radius = settings_pane.radius;
+            let intensity = if settings_pane.auto_intensity { None } else { Some(settings_pane.intensity) };
             let screen_width = image.width();
             let screen_height = image.height();
             let filters: Vec<_> = self.get_filters_pane().filters.iter().filter_map(|filter_row| filter_row.filter.as_ref()).collect();
@@ -744,7 +817,7 @@ impl App {
                 .map(|demo_file| demo_file.heatmap_analysis.deaths.iter())
                 .flatten()
                 .filter(|death| filters.iter().all(|filter| filter.apply(death)));
-            let heatmap_generation_output = coldmaps::generate_heatmap(heatmap_type, deaths, image, screen_width, screen_height, pos_x, pos_y, scale, coords_type);
+            let heatmap_generation_output = coldmaps::generate_heatmap(heatmap_type, deaths, image, screen_width, screen_height, pos_x, pos_y, scale, coords_type, radius, intensity);
             match &mut self.get_preview_pane_mut().heatmap_image {
                 Some(heatmap_image) => {
                     heatmap_image.handle = image_to_handle(&heatmap_generation_output);

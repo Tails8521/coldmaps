@@ -57,6 +57,8 @@ struct HeatMapParameters {
     right_x: f32,
     top_y: f32,
     bottom_y: f32,
+    radius: f32,
+    intensity: Option<f32>
 }
 
 #[derive(Debug)]
@@ -65,7 +67,7 @@ pub struct HeatMapGenerator {
 }
 
 impl HeatMapGenerator {
-    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType, radius: f32, intensity: Option<f32>) -> Self {
         let screen_width = screen_width as f32;
         let screen_height = screen_height as f32;
         let aspect_ratio = screen_width / screen_height;
@@ -78,6 +80,8 @@ impl HeatMapGenerator {
                     right_x: pos_x + scale * LEVELOVERVIEW_SCALE_MULTIPLIER * aspect_ratio,
                     top_y: pos_y + scale * LEVELOVERVIEW_SCALE_MULTIPLIER,
                     bottom_y: pos_y - scale * LEVELOVERVIEW_SCALE_MULTIPLIER,
+                    radius,
+                    intensity
                 },
             },
             CoordsType::Console => Self {
@@ -88,6 +92,8 @@ impl HeatMapGenerator {
                     right_x: pos_x + scale * LEVELOVERVIEW_SCALE_MULTIPLIER * aspect_ratio * 2.0,
                     top_y: pos_y,
                     bottom_y: pos_y - scale * LEVELOVERVIEW_SCALE_MULTIPLIER * 2.0,
+                    radius,
+                    intensity
                 },
             },
         }
@@ -169,6 +175,9 @@ impl HeatMapGenerator {
         let mut intensities = Vec::with_capacity(nb_pixels);
         intensities.resize_with(nb_pixels, || 0.0);
         let mut max_intensity = f32::NEG_INFINITY;
+        let intensity_increment = if let Some(increment) = self.params.intensity { increment / 100.0 } else { 1.0 };
+        let radius = self.params.radius / 10.0;
+        let pixels_iters = (radius * 2.0).ceil() as i32;
         for death in deaths {
             let entity_state = match heatmap_type {
                 HeatmapType::VictimPosition => &death.victim_entity_state,
@@ -180,12 +189,12 @@ impl HeatMapGenerator {
                 let (x_f, y_f) = self.game_coords_to_screen_coords(game_coords.x, game_coords.y);
                 let x_i = x_f.round() as i32;
                 let y_i = y_f.round() as i32;
-                for y_offset in -10..10 {
+                for y_offset in -pixels_iters..pixels_iters {
                     let y = y_i + y_offset;
                     if y < 0 || y >= image.height() as i32 {
                         continue;
                     }
-                    for x_offset in -10..10 {
+                    for x_offset in -pixels_iters..pixels_iters {
                         let x = x_i + x_offset;
                         if x < 0 || x >= image.width() as i32 {
                             continue;
@@ -193,7 +202,7 @@ impl HeatMapGenerator {
                         let x_dist = x_f - x as f32;
                         let y_dist = y_f - y as f32;
                         let dist = (x_dist * x_dist + y_dist * y_dist).sqrt();
-                        let intensity = gaussian(dist, 5.0);
+                        let intensity = intensity_increment * gaussian(dist, radius);
                         let intensity_index = (y * image.width() as i32 + x) as usize;
                         intensities[intensity_index] += intensity;
                         if intensities[intensity_index] > max_intensity {
@@ -204,7 +213,11 @@ impl HeatMapGenerator {
             }
         }
         for (pixel, base_intensity) in image.pixels_mut().zip(intensities) {
-            let intensity = base_intensity / max_intensity;
+            let intensity = if self.params.intensity.is_none() {
+                base_intensity * 2.0 / max_intensity // auto intensity
+            } else {
+                base_intensity
+            };
             let heat_color = heatmap_gradient.get(intensity);
             if let [r, g, b] = pixel.channels() {
                 *pixel = Rgb::from([

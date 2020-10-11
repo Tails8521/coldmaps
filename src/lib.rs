@@ -73,9 +73,10 @@ pub fn generate_heatmap<'a>(
     scale: f32,
     coords_type: CoordsType,
     radius: f32,
-    intensity: Option<f32>
+    intensity: Option<f32>,
+    use_sentry_position: bool,
 ) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
-    let heatmap_generator = heatmap::HeatMapGenerator::new(pos_x, pos_y, screen_width, screen_height, scale, coords_type, radius, intensity);
+    let heatmap_generator = heatmap::HeatMapGenerator::new(pos_x, pos_y, screen_width, screen_height, scale, coords_type, radius, intensity, use_sentry_position);
     heatmap_generator.generate_heatmap(heatmap_type, deaths, &mut image);
     image
 }

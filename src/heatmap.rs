@@ -58,7 +58,8 @@ struct HeatMapParameters {
     top_y: f32,
     bottom_y: f32,
     radius: f32,
-    intensity: Option<f32>
+    intensity: Option<f32>,
+    use_sentry_position: bool,
 }
 
 #[derive(Debug)]
@@ -67,7 +68,7 @@ pub struct HeatMapGenerator {
 }
 
 impl HeatMapGenerator {
-    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType, radius: f32, intensity: Option<f32>) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType, radius: f32, intensity: Option<f32>, use_sentry_position: bool) -> Self {
         let screen_width = screen_width as f32;
         let screen_height = screen_height as f32;
         let aspect_ratio = screen_width / screen_height;
@@ -81,7 +82,8 @@ impl HeatMapGenerator {
                     top_y: pos_y + scale * LEVELOVERVIEW_SCALE_MULTIPLIER,
                     bottom_y: pos_y - scale * LEVELOVERVIEW_SCALE_MULTIPLIER,
                     radius,
-                    intensity
+                    intensity,
+                    use_sentry_position,
                 },
             },
             CoordsType::Console => Self {
@@ -93,7 +95,8 @@ impl HeatMapGenerator {
                     top_y: pos_y,
                     bottom_y: pos_y - scale * LEVELOVERVIEW_SCALE_MULTIPLIER * 2.0,
                     radius,
-                    intensity
+                    intensity,
+                    use_sentry_position,
                 },
             },
         }
@@ -118,9 +121,19 @@ impl HeatMapGenerator {
                 // LinSrgba::new(0.0, 0.0, 1.0, 1.0),
             ]);
             for death in deaths {
-                if let (Some(killer_entity), Some(victim_entity)) = (&death.killer_entity_state, &death.victim_entity_state) {
-                    let killer_coords = self.game_coords_to_screen_coords(killer_entity.position.x, killer_entity.position.y);
-                    let victim_coords = self.game_coords_to_screen_coords(victim_entity.position.x, victim_entity.position.y);
+                let killer_pos = if self.params.use_sentry_position {
+                    if let Some(sentry_position) = death.sentry_position {
+                        Some(sentry_position)
+                    } else {
+                        death.killer_entity_state.as_ref().map(|entity| entity.position)
+                    }
+                } else {
+                    death.killer_entity_state.as_ref().map(|entity| entity.position)
+                };
+                let victim_pos = death.victim_entity_state.as_ref().map(|entity| entity.position);
+                if let (Some(killer_pos), Some(victim_pos)) = (killer_pos, victim_pos) {
+                    let killer_coords = self.game_coords_to_screen_coords(killer_pos.x, killer_pos.y);
+                    let victim_coords = self.game_coords_to_screen_coords(victim_pos.x, victim_pos.y);
                     let points: Vec<((i32, i32), f32)> = line_drawing::XiaolinWu::<f32, i32>::new(killer_coords, victim_coords).collect();
 
                     // this is needed because the line drawing algorithm doesn't always go in the start-end order, we need to check what order was used and invert the gradient as needed
@@ -179,13 +192,19 @@ impl HeatMapGenerator {
         let radius = self.params.radius / 10.0;
         let pixels_iters = (radius * 2.0).ceil() as i32;
         for death in deaths {
-            let entity_state = match heatmap_type {
-                HeatmapType::VictimPosition => &death.victim_entity_state,
-                HeatmapType::KillerPosition => &death.killer_entity_state,
-                HeatmapType::Lines => unreachable!(),
+            let game_coords = match (heatmap_type, self.params.use_sentry_position) {
+                (HeatmapType::VictimPosition, _) => death.victim_entity_state.as_ref().map(|entity| entity.position),
+                (HeatmapType::KillerPosition, false) => death.killer_entity_state.as_ref().map(|entity| entity.position),
+                (HeatmapType::KillerPosition, true) => {
+                    if let Some(sentry_position) = death.sentry_position {
+                        Some(sentry_position)
+                    } else {
+                        death.killer_entity_state.as_ref().map(|entity| entity.position)
+                    }
+                }
+                (HeatmapType::Lines, _) => unreachable!(),
             };
-            if let Some(entity_state) = entity_state {
-                let game_coords = entity_state.position;
+            if let Some(game_coords) = game_coords {
                 let (x_f, y_f) = self.game_coords_to_screen_coords(game_coords.x, game_coords.y);
                 let x_i = x_f.round() as i32;
                 let y_i = y_f.round() as i32;

@@ -12,7 +12,7 @@ use std::{
     path::PathBuf,
 };
 
-use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo};
+use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo, handle_to_entity_index};
 use serde::Serialize;
 use tf_demo_parser::{
     demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::packetentities::PVS,
@@ -893,12 +893,4 @@ impl DemoAnalyzer {
         }
         Ok(())
     }
-}
-
-fn handle_to_entity_index(handle: i64) -> Option<NonZeroU32> {
-    let ret = handle as u32 & 0b111_1111_1111; // The rest of the bits is probably some kind of generational index
-    if ret == 2047 {
-        return None
-    }
-    NonZeroU32::new(ret)
 }

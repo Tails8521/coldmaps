@@ -1,9 +1,9 @@
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::{collections::{BTreeMap, HashMap}, num::NonZeroU32};
 use std::convert::TryFrom;
 use std::str::FromStr;
-use tf_demo_parser::demo::gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent};
+use tf_demo_parser::demo::{gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent}, message::packetentities::PVS};
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
 use tf_demo_parser::demo::message::usermessage::{ChatMessageKind, SayText2Message, UserMessage};
 use tf_demo_parser::demo::message::{Message, MessageType};
@@ -158,6 +158,7 @@ pub struct Death {
     pub tick: u32,
     pub round: u32,
     pub during_round: bool,
+    pub sentry_position: Option<Vector>
 }
 
 impl Death {
@@ -193,6 +194,7 @@ impl Death {
             victim_steamid: users.get(&victim).expect("Can't get victim").steam_id.clone(),
             victim_entity: event.victim_ent_index,
             victim_entity_state: None,
+            sentry_position: None
         }
     }
 }
@@ -259,6 +261,12 @@ pub struct PlayerEntity {
     pub state: PlayerState,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum OtherEntity {
+    Sentry { position: Option<Vector> },
+    SentryRocket { sentry: Option<EntityId> }
+}
+
 impl MessageHandler for HeatmapAnalyser {
     type Output = HeatmapAnalysis;
 
@@ -280,7 +288,15 @@ impl MessageHandler for HeatmapAnalyser {
             Message::UserMessage(message) => self.handle_user_message(&message, tick),
             Message::PacketEntities(message) => {
                 for entity in &message.entities {
-                    self.handle_entity(entity);
+                    if entity.pvs == PVS::Delete {
+                        let removed_entity = entity.entity_index;
+                        let _removed = self.state.other_entities.remove(&removed_entity);
+                    } else {
+                        self.handle_entity(entity);
+                    }
+                }
+                for removed_entity in &message.removed_entities {
+                    let _removed = self.state.other_entities.remove(removed_entity);
                 }
             }
             _ => unreachable!(),
@@ -318,6 +334,8 @@ impl HeatmapAnalyser {
             "CTFPlayer" => self.handle_player_entity(entity),
             "CTFPlayerResource" => self.handle_player_resource(entity),
             "CWorld" => self.handle_world_entity(entity),
+            "CObjectSentrygun" => self.handle_sentry_entity(entity),
+            "CTFProjectile_SentryRocket" => self.handle_sentry_rocket_entity(entity),
             _ => {}
         }
     }
@@ -384,6 +402,46 @@ impl HeatmapAnalyser {
         }
     }
 
+    fn handle_sentry_entity(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity::Sentry {
+            position: None
+        });
+        let mut position = if let OtherEntity::Sentry { position } = *entry {
+            position
+        } else {
+            None
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
+                _ => {}
+            }
+        }
+        *entry = OtherEntity::Sentry { position };
+    }
+
+    fn handle_sentry_rocket_entity(&mut self, entity: &PacketEntity) {
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity::SentryRocket {
+            sentry: None
+        });
+        let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry {
+            sentry
+        } else {
+            None
+        };
+        for prop in &entity.props {
+            match prop.definition.name.as_str() {
+                "m_hOwnerEntity" => {
+                    let handle = i64::try_from(&prop.value).unwrap_or_default();
+                    let entity_id = handle_to_entity_index(handle);
+                    sentry = entity_id.map(|id| id.get().into());
+                }
+                _ => {}
+            }
+        }
+        *entry = OtherEntity::SentryRocket { sentry };
+    }
+
     fn handle_user_message(&mut self, message: &UserMessage, tick: u32) {
         if let UserMessage::SayText2(text_message) = message {
             if text_message.kind == ChatMessageKind::NameChange {
@@ -422,6 +480,30 @@ impl HeatmapAnalyser {
                 }
                 if let Some(victim_entity) = victim.entity_id {
                     death.victim_entity_state = Some(self.state.get_or_create_player_entity(victim_entity).clone());
+                }
+                match death.weapon.as_str() {
+                    "obj_sentrygun" | "obj_sentrygun2" | "obj_sentrygun3" | "obj_minisentry" => {
+                        if let Some(entity) = self.state.other_entities.get(&death.killer_entity.into()) {
+                            match entity {
+                                OtherEntity::Sentry { position } => {
+                                    death.sentry_position = *position;
+                                }
+                                OtherEntity::SentryRocket { sentry } => {
+                                    if let Some(sentry_entity) = sentry {
+                                        if let Some(entity) = self.state.other_entities.get(sentry_entity) {
+                                            match entity {
+                                                OtherEntity::Sentry { position } => {
+                                                    death.sentry_position = *position;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 self.state.deaths.push(death);
             }
@@ -491,6 +573,7 @@ pub struct HeatmapAnalysis {
     pub in_round: bool,
 
     pub player_entities: Vec<PlayerEntity>,
+    pub other_entities: HashMap<EntityId, OtherEntity>,
     pub world: Option<World>,
 }
 
@@ -532,6 +615,7 @@ impl Default for HeatmapAnalysis {
                 player_entities.push(world);
                 player_entities
             },
+            other_entities: Default::default(),
             world: Default::default(),
         }
     }
@@ -567,4 +651,12 @@ impl HeatmapAnalysis {
         };
         &mut self.player_entities[index]
     }
+}
+
+pub fn handle_to_entity_index(handle: i64) -> Option<NonZeroU32> {
+    let ret = handle as u32 & 0b111_1111_1111; // The rest of the bits is probably some kind of generational index
+    if ret == 2047 {
+        return None
+    }
+    NonZeroU32::new(ret)
 }

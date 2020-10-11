@@ -23,6 +23,7 @@ use tf_demo_parser::{
 use weapons::Weapon;
 
 const SECTION_SIZE: usize = 1024;
+const SHOW_UNKNOWN_ENTITIES: bool = false;
 
 #[derive(Debug, Serialize)]
 enum Command {
@@ -648,8 +649,10 @@ impl DemoAnalyzer {
             | "CTFWrench" => self.handle_weapon(entity),
 
             _ => {
-                let class_name = class_name.into();
-                self.handle_unknown_entity(entity, class_name);
+                if SHOW_UNKNOWN_ENTITIES {
+                    let class_name = class_name.into();
+                    self.handle_unknown_entity(entity, class_name);
+                }
             }
         }
     }

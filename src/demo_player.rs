@@ -21,6 +21,7 @@ use tf_demo_parser::{
     demo::vector::VectorXY, Demo, DemoParser, MessageType, ParseError, ParserState, ReadResult, Stream,
 };
 use weapons::Weapon;
+use std::borrow::Borrow;
 
 const SECTION_SIZE: usize = 1024;
 const SHOW_UNKNOWN_ENTITIES: bool = false;
@@ -126,20 +127,20 @@ fn serialize<T: serde::Serialize>(input: T) -> String {
     serde_json::to_string(&output).unwrap()
 }
 
-struct BufferSection {
-    ticker: DemoTicker<DemoAnalyzer>,
-    playback_ticker: Option<DemoTicker<DemoAnalyzer>>,
+struct BufferSection<'a> {
+    ticker: DemoTicker<'a, DemoAnalyzer>,
+    playback_ticker: Option<DemoTicker<'a, DemoAnalyzer>>,
     cached_frames: Vec<String>,
     first_frame: String,
 }
 
-struct BufferedPlayer {
-    sections: Vec<BufferSection>,
+struct BufferedPlayer<'a> {
+    sections: Vec<BufferSection<'a>>,
     playhead_position: usize,
     last_frame: usize,
 }
 
-impl BufferedPlayer {
+impl<'a> BufferedPlayer<'a> {
     fn get_frame(&mut self, playhead_position: usize) -> &str {
         self.playhead_position = playhead_position;
         let section_idx = playhead_position / SECTION_SIZE;
@@ -212,17 +213,17 @@ impl BufferedPlayer {
     }
 }
 
-struct DemoPlayerState {
+struct DemoPlayerState<'a> {
     is_corrupted: bool,
     frame_to_tick: Vec<u32>,
     tick_to_frame: Vec<usize>,
     final_state: String,
     demo_header: Header,
-    player: BufferedPlayer,
+    player: BufferedPlayer<'a>,
 }
 
-impl DemoPlayerState {
-    fn new(demo: Demo) -> Result<Self, ParseError> {
+impl<'a> DemoPlayerState<'a> {
+    fn new(demo: Demo<'a>) -> Result<Self, ParseError> {
         let (demo_header, mut ticker) = DemoParser::new_with_analyser(demo.get_stream(), DemoAnalyzer::default()).ticker()?;
         let mut frame_to_tick = Vec::with_capacity(demo_header.frames as usize + 6);
         let mut tick_to_frame = Vec::new();
@@ -307,7 +308,7 @@ pub(crate) fn run() -> Result<(), Box<dyn Error>> {
             match command {
                 Command::Load(path) => match fs::read(path) {
                     Ok(file) => {
-                        let demo = Demo::new(file);
+                        let demo = Demo::owned(file);
                         match DemoPlayerState::new(demo) {
                             Ok(new_state) => {
                                 let load_output = LoadOutput {
@@ -544,7 +545,7 @@ impl MessageHandler for DemoAnalyzer {
     fn handle_string_entry(&mut self, table: &str, _index: usize, entry: &StringTableEntry) {
         match table {
             "userinfo" => {
-                let _ = self.parse_user_info(entry.text.as_ref().map(|s| s.as_str()), entry.extra_data.as_ref().map(|data| data.data.clone()));
+                let _ = self.parse_user_info(entry.text.as_ref().map(|s| s.borrow()), entry.extra_data.as_ref().map(|data| data.data.clone()));
             }
             _ => {}
         }

@@ -1,13 +1,16 @@
-use serde::Deserialize;
-use std::collections::HashMap;
-use std::io::{Cursor};
+use coldmaps::heatmap::LEVELOVERVIEW_SCALE_MULTIPLIER;
+use image::io::Reader;
 use image::{ImageFormat, RgbImage};
 use reqwest::StatusCode;
-use image::io::Reader;
-use coldmaps::heatmap::LEVELOVERVIEW_SCALE_MULTIPLIER;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::io::Cursor;
 
 pub async fn get_boundary(map: &str) -> Result<Option<(f32, f32, f32)>, reqwest::Error> {
-    let cache: HashMap<String, Boundary> = reqwest::get("https://github.com/demostf/demos.tf/raw/master/src/Analyse/mapboundries.json").await?.json().await?;
+    let cache: HashMap<String, Boundary> = reqwest::get("https://github.com/demostf/demos.tf/raw/master/src/Analyse/mapboundries.json")
+        .await?
+        .json()
+        .await?;
     Ok(cache.get(map).map(|boundary| {
         let x = (boundary.max.x + boundary.min.x) / 2.0;
         let y = (boundary.max.y + boundary.min.y) / 2.0;

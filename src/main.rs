@@ -1,17 +1,17 @@
 use coldmaps::*;
 
 mod demo_player;
+mod demostf;
 mod gui_filters;
 mod style;
-mod demostf;
 
 use filters::{FilterTrait, OrderedOperator, Property, PropertyOperator};
 use gui_filters::{FilterType, FiltersPane};
 use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::{HeatmapAnalysis, Team};
 use iced::{
-    button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application, Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image,
-    Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput, Checkbox, Slider, slider,
+    button, executor, image::Handle, pane_grid, scrollable, slider, text_input, window, Align, Application, Button, Checkbox, Column, Command, Container, Element, Font,
+    HorizontalAlignment, Image, Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Slider, Subscription, Text, TextInput,
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb, RgbImage};
 use pane_grid::{Axis, Pane};
@@ -159,8 +159,8 @@ impl DemoList {
                         .size(24)
                         .horizontal_alignment(HorizontalAlignment::Center),
                 )
-                    .width(Length::Fill)
-                    .into(),
+                .width(Length::Fill)
+                .into(),
                 style::ResultContainer::Error,
             )
         } else {
@@ -310,7 +310,9 @@ impl SettingsPane {
             } else {
                 format!("Heatmap intensity: {:.2}", self.intensity / 100.0)
             };
-            let intensity_checkbox = Container::new(Checkbox::new(self.auto_intensity, "Auto", Message::AutoIntensityCheckboxToggled).style(self.theme)).align_x(Align::End).width(Length::Fill);
+            let intensity_checkbox = Container::new(Checkbox::new(self.auto_intensity, "Auto", Message::AutoIntensityCheckboxToggled).style(self.theme))
+                .align_x(Align::End)
+                .width(Length::Fill);
             let intensity_label = Row::new().spacing(10).push(Text::new(&intensity_text)).push(intensity_checkbox);
             heatmap_options = heatmap_options.push(intensity_label);
             if !self.auto_intensity {
@@ -321,7 +323,8 @@ impl SettingsPane {
             let radius_slider = Slider::new(&mut self.radius_state, 1.0..=100.0, self.radius, Message::RadiusChanged).style(self.theme);
             heatmap_options = heatmap_options.push(radius_label).push(radius_slider);
         }
-        let use_sentry_position_checkbox = Checkbox::new(self.use_sentry_position, "Use sentry position for sentry kills", Message::UseSentryPositionCheckboxToggled).style(self.theme);
+        let use_sentry_position_checkbox =
+            Checkbox::new(self.use_sentry_position, "Use sentry position for sentry kills", Message::UseSentryPositionCheckboxToggled).style(self.theme);
         heatmap_options = heatmap_options.push(use_sentry_position_checkbox);
 
         let settings_content: Element<_> = Column::new()
@@ -473,24 +476,26 @@ impl Application for App {
             }
             Message::WindowEventOccurred(_) => {}
             Message::MapSet(map) => {
-                return Command::perform(async move {
-                    let (x, y, scale) = match demostf::get_boundary(&map).await {
-                        Ok(boundaries) => boundaries,
-                        Err(e) => {
-                            eprintln!("Error while fetching demostf boundaries {}", e);
-                            None
-                        }
-                    }?;
-                    let image = match demostf::get_image(&map).await {
-                        Ok(image) => image,
-                        Err(e) => {
-                            eprintln!("Error while fetching demostf image {}", e);
-                            None
-                        }
-                    }?;
-                    Some((image, x, y, scale))
-                },
-                Message::DemosTFImageLoader);
+                return Command::perform(
+                    async move {
+                        let (x, y, scale) = match demostf::get_boundary(&map).await {
+                            Ok(boundaries) => boundaries,
+                            Err(e) => {
+                                eprintln!("Error while fetching demostf boundaries {}", e);
+                                None
+                            }
+                        }?;
+                        let image = match demostf::get_image(&map).await {
+                            Ok(image) => image,
+                            Err(e) => {
+                                eprintln!("Error while fetching demostf image {}", e);
+                                None
+                            }
+                        }?;
+                        Some((image, x, y, scale))
+                    },
+                    Message::DemosTFImageLoader,
+                );
             }
             Message::LevelImageSet(image) => {
                 let image_with_heatmap_overlay = image.clone();
@@ -649,7 +654,7 @@ impl Application for App {
                 self.show_stats();
                 self.try_generate_heatmap();
                 self.set_busy(false);
-                return Command::perform(async {map}, Message::MapSet);
+                return Command::perform(async { map }, Message::MapSet);
             }
             Message::ExportImagePressed => {
                 return Command::perform(open_save_dialog(), Message::ImageNameSelected);
@@ -871,7 +876,20 @@ impl App {
                 .map(|demo_file| demo_file.heatmap_analysis.deaths.iter())
                 .flatten()
                 .filter(|death| filters.iter().all(|filter| filter.apply(death)));
-            let heatmap_generation_output = coldmaps::generate_heatmap(heatmap_type, deaths, image, screen_width, screen_height, pos_x, pos_y, scale, coords_type, radius, intensity, use_sentry_position);
+            let heatmap_generation_output = coldmaps::generate_heatmap(
+                heatmap_type,
+                deaths,
+                image,
+                screen_width,
+                screen_height,
+                pos_x,
+                pos_y,
+                scale,
+                coords_type,
+                radius,
+                intensity,
+                use_sentry_position,
+            );
             match &mut self.get_preview_pane_mut().heatmap_image {
                 Some(heatmap_image) => {
                     heatmap_image.handle = image_to_handle(&heatmap_generation_output);

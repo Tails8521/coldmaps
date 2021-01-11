@@ -1,15 +1,21 @@
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-use std::{collections::{BTreeMap, HashMap}, num::NonZeroU32};
 use std::convert::TryFrom;
 use std::str::FromStr;
-use tf_demo_parser::demo::{gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent}, message::packetentities::PVS};
+use std::{
+    collections::{BTreeMap, HashMap},
+    num::NonZeroU32,
+};
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
 use tf_demo_parser::demo::message::usermessage::{ChatMessageKind, SayText2Message, UserMessage};
 use tf_demo_parser::demo::message::{Message, MessageType};
 use tf_demo_parser::demo::packet::{
     datatable::{ParseSendTable, ServerClass, ServerClassName},
     stringtable::StringTableEntry,
+};
+use tf_demo_parser::demo::{
+    gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent},
+    message::packetentities::PVS,
 };
 use tf_demo_parser::demo::{
     parser::handler::{BorrowMessageHandler, MessageHandler},
@@ -158,7 +164,7 @@ pub struct Death {
     pub tick: u32,
     pub round: u32,
     pub during_round: bool,
-    pub sentry_position: Option<Vector>
+    pub sentry_position: Option<Vector>,
 }
 
 impl Death {
@@ -194,7 +200,7 @@ impl Death {
             victim_steamid: users.get(&victim).expect("Can't get victim").steam_id.clone(),
             victim_entity: event.victim_ent_index,
             victim_entity_state: None,
-            sentry_position: None
+            sentry_position: None,
         }
     }
 }
@@ -264,7 +270,7 @@ pub struct PlayerEntity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OtherEntity {
     Sentry { position: Option<Vector> },
-    SentryRocket { sentry: Option<EntityId> }
+    SentryRocket { sentry: Option<EntityId> },
 }
 
 impl MessageHandler for HeatmapAnalyser {
@@ -403,14 +409,12 @@ impl HeatmapAnalyser {
     }
 
     fn handle_sentry_entity(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity::Sentry {
-            position: None
-        });
-        let mut position = if let OtherEntity::Sentry { position } = *entry {
-            position
-        } else {
-            None
-        };
+        let entry = self
+            .state
+            .other_entities
+            .entry(entity.entity_index)
+            .or_insert_with(|| OtherEntity::Sentry { position: None });
+        let mut position = if let OtherEntity::Sentry { position } = *entry { position } else { None };
         for prop in &entity.props {
             match prop.definition.name.as_str() {
                 "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
@@ -421,14 +425,12 @@ impl HeatmapAnalyser {
     }
 
     fn handle_sentry_rocket_entity(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity::SentryRocket {
-            sentry: None
-        });
-        let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry {
-            sentry
-        } else {
-            None
-        };
+        let entry = self
+            .state
+            .other_entities
+            .entry(entity.entity_index)
+            .or_insert_with(|| OtherEntity::SentryRocket { sentry: None });
+        let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry { sentry } else { None };
         for prop in &entity.props {
             match prop.definition.name.as_str() {
                 "m_hOwnerEntity" => {
@@ -658,7 +660,7 @@ impl HeatmapAnalysis {
 pub fn handle_to_entity_index(handle: i64) -> Option<NonZeroU32> {
     let ret = handle as u32 & 0b111_1111_1111; // The rest of the bits is probably some kind of generational index
     if ret == 2047 {
-        return None
+        return None;
     }
     NonZeroU32::new(ret)
 }

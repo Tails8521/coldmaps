@@ -68,7 +68,17 @@ pub struct HeatMapGenerator {
 }
 
 impl HeatMapGenerator {
-    pub fn new(pos_x: f32, pos_y: f32, screen_width: u32, screen_height: u32, scale: f32, coords_type: CoordsType, radius: f32, intensity: Option<f32>, use_sentry_position: bool) -> Self {
+    pub fn new(
+        pos_x: f32,
+        pos_y: f32,
+        screen_width: u32,
+        screen_height: u32,
+        scale: f32,
+        coords_type: CoordsType,
+        radius: f32,
+        intensity: Option<f32>,
+        use_sentry_position: bool,
+    ) -> Self {
         let screen_width = screen_width as f32;
         let screen_height = screen_height as f32;
         let aspect_ratio = screen_width / screen_height;

@@ -15,7 +15,7 @@ pub struct DemoProcessingOutput {
     pub path: PathBuf,
     pub heatmap_analysis: Option<HeatmapAnalysis>,
     pub error: Option<String>,
-    pub map: String
+    pub map: String,
 }
 
 pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {

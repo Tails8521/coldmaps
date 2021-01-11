@@ -1,7 +1,9 @@
 use coldmaps::*;
+
 mod demo_player;
 mod gui_filters;
 mod style;
+mod demostf;
 
 use filters::{FilterTrait, OrderedOperator, Property, PropertyOperator};
 use gui_filters::{FilterType, FiltersPane};
@@ -11,7 +13,7 @@ use iced::{
     button, executor, image::Handle, pane_grid, scrollable, text_input, window, Align, Application, Button, Column, Command, Container, Element, Font, HorizontalAlignment, Image,
     Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Subscription, Text, TextInput, Checkbox, Slider, slider,
 };
-use image::{io::Reader, ImageBuffer, Pixel, Rgb};
+use image::{io::Reader, ImageBuffer, Pixel, Rgb, RgbImage};
 use pane_grid::{Axis, Pane};
 use std::{mem, path::PathBuf, time::Instant};
 
@@ -55,7 +57,8 @@ pub fn main() {
 struct App {
     pane_grid_state: pane_grid::State<PaneState>,
     theme: style::Theme,
-    busy: bool, // TODO visual indicator?
+    busy: bool,
+    // TODO visual indicator?
     dropped_files: Vec<PathBuf>,
     demos_pane: Pane,
     filters_pane: Pane,
@@ -68,7 +71,6 @@ struct HeatmapImage {
     image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     image_with_heatmap_overlay: ImageBuffer<Rgb<u8>, Vec<u8>>,
     handle: Handle,
-    _path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -98,6 +100,9 @@ enum Message {
     ExportImagePressed,
     ImageNameSelected(Option<PathBuf>),
     EndOfDemoFilesDrop(()),
+    MapSet(String),
+    DemosTFImageLoader(Option<(RgbImage, f32, f32, f32)>),
+    LevelImageSet(RgbImage),
     AddFilter,
     FilterSelected(usize, FilterType),
     ClassIconClicked(usize, usize),
@@ -154,8 +159,8 @@ impl DemoList {
                         .size(24)
                         .horizontal_alignment(HorizontalAlignment::Center),
                 )
-                .width(Length::Fill)
-                .into(),
+                    .width(Length::Fill)
+                    .into(),
                 style::ResultContainer::Error,
             )
         } else {
@@ -375,6 +380,7 @@ impl Preview {
         Container::new(result_container).padding(4).width(Length::Fill).height(Length::Fill).into()
     }
 }
+
 #[derive(Default)]
 struct LogPane {
     theme: style::Theme,
@@ -460,21 +466,55 @@ impl Application for App {
                     if let Ok(reader) = Reader::open(&path) {
                         if let Ok(image) = reader.decode() {
                             let image = image.into_rgb();
-                            let image_with_heatmap_overlay = image.clone();
-                            let handle = image_to_handle(&image);
-                            self.get_preview_pane_mut().heatmap_image.replace(HeatmapImage {
-                                image,
-                                image_with_heatmap_overlay,
-                                handle,
-                                _path: path,
-                            });
-                            self.get_settings_pane_mut().image_ready = true;
-                            self.try_generate_heatmap();
+                            return Command::perform(async { image }, Message::LevelImageSet);
                         }
                     }
                 }
             }
             Message::WindowEventOccurred(_) => {}
+            Message::MapSet(map) => {
+                return Command::perform(async move {
+                    let (x, y, scale) = match demostf::get_boundary(&map).await {
+                        Ok(boundaries) => boundaries,
+                        Err(e) => {
+                            eprintln!("Error while fetching demostf boundaries {}", e);
+                            None
+                        }
+                    }?;
+                    let image = match demostf::get_image(&map).await {
+                        Ok(image) => image,
+                        Err(e) => {
+                            eprintln!("Error while fetching demostf image {}", e);
+                            None
+                        }
+                    }?;
+                    Some((image, x, y, scale))
+                },
+                Message::DemosTFImageLoader);
+            }
+            Message::LevelImageSet(image) => {
+                let image_with_heatmap_overlay = image.clone();
+                let handle = image_to_handle(&image);
+                self.get_preview_pane_mut().heatmap_image.replace(HeatmapImage {
+                    image,
+                    image_with_heatmap_overlay,
+                    handle,
+                });
+                self.get_settings_pane_mut().image_ready = true;
+                self.try_generate_heatmap();
+            }
+            Message::DemosTFImageLoader(Some((image, x, y, scale))) => {
+                let settings_pane = self.get_settings_pane_mut();
+                settings_pane.x_pos = Some(x);
+                settings_pane.x_pos_input = format!("{}", x);
+                settings_pane.y_pos = Some(y);
+                settings_pane.y_pos_input = format!("{}", y);
+                settings_pane.scale = Some(scale);
+                settings_pane.scale_input = format!("{}", scale);
+
+                return Command::perform(async { image }, Message::LevelImageSet);
+            }
+            Message::DemosTFImageLoader(None) => {}
             Message::EndOfDemoFilesDrop(_) => {
                 if !self.dropped_files.is_empty() {
                     self.set_busy(true);
@@ -574,9 +614,11 @@ impl Application for App {
                 let mut death_count = 0;
                 let demo_list = self.get_demo_list_pane_mut();
                 let mut errors = Vec::new();
+                let mut map = String::new();
                 for demo in timed_result.result.iter_mut() {
                     let demo = mem::take(demo);
                     demo_count += 1;
+                    map = demo.map.clone();
                     if let Some(heatmap_analysis) = demo.heatmap_analysis {
                         death_count += heatmap_analysis.deaths.len();
                         let path = demo.path;
@@ -607,6 +649,7 @@ impl Application for App {
                 self.show_stats();
                 self.try_generate_heatmap();
                 self.set_busy(false);
+                return Command::perform(async {map}, Message::MapSet);
             }
             Message::ExportImagePressed => {
                 return Command::perform(open_save_dialog(), Message::ImageNameSelected);

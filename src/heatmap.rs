@@ -3,7 +3,7 @@ use image::{ImageBuffer, Pixel, Rgb};
 use palette::{Gradient, LinSrgba};
 use std::fmt::Display;
 
-const LEVELOVERVIEW_SCALE_MULTIPLIER: f32 = 512.0;
+pub const LEVELOVERVIEW_SCALE_MULTIPLIER: f32 = 512.0;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CoordsType {

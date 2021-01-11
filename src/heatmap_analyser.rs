@@ -575,6 +575,7 @@ pub struct HeatmapAnalysis {
     pub player_entities: Vec<PlayerEntity>,
     pub other_entities: HashMap<EntityId, OtherEntity>,
     pub world: Option<World>,
+    pub map: String,
 }
 
 impl Default for HeatmapAnalysis {
@@ -617,6 +618,7 @@ impl Default for HeatmapAnalysis {
             },
             other_entities: Default::default(),
             world: Default::default(),
+            map: Default::default(),
         }
     }
 }

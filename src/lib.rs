@@ -15,6 +15,7 @@ pub struct DemoProcessingOutput {
     pub path: PathBuf,
     pub heatmap_analysis: Option<HeatmapAnalysis>,
     pub error: Option<String>,
+    pub map: String,
 }
 
 pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
@@ -28,11 +29,12 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                         path: path.clone(),
                         heatmap_analysis: None,
                         error: Some(err.to_string()),
+                        map: String::new(),
                     }
                 }
             };
             let demo = Demo::new(file);
-            let (_header, mut ticker) = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::default()).ticker().unwrap();
+            let (header, mut ticker) = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::default()).ticker().unwrap();
             loop {
                 match ticker.tick() {
                     Ok(true) => continue,
@@ -41,6 +43,7 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                             path: path.clone(),
                             heatmap_analysis: Some(ticker.into_state()),
                             error: None,
+                            map: header.map,
                         }
                     }
                     Err(_err) => {
@@ -53,6 +56,7 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                         break DemoProcessingOutput {
                             path: path.clone(),
                             heatmap_analysis: Some(heatmap_analysis),
+                            map: header.map,
                             error,
                         };
                     }

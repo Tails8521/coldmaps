@@ -1,7 +1,6 @@
 mod weapons;
 
 use io::{BufRead, BufReader, BufWriter, LineWriter, StdoutLock};
-use std::{num::NonZeroU32, str::FromStr};
 use std::{
     borrow::Cow,
     collections::BTreeMap,
@@ -11,8 +10,9 @@ use std::{
     io::{self, Write},
     path::PathBuf,
 };
+use std::{num::NonZeroU32, str::FromStr};
 
-use coldmaps::heatmap_analyser::{Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo, handle_to_entity_index};
+use coldmaps::heatmap_analyser::{handle_to_entity_index, Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo};
 use serde::Serialize;
 use tf_demo_parser::{
     demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::packetentities::PVS,
@@ -438,7 +438,11 @@ enum EntityContent {
         recede_time: f32,
     },
     Cart,
-    Weapon { name: Weapon, id: i32, owner: Option<NonZeroU32> }
+    Weapon {
+        name: Weapon,
+        id: i32,
+        owner: Option<NonZeroU32>,
+    },
 }
 
 impl Default for EntityContent {
@@ -708,16 +712,14 @@ impl DemoAnalyzer {
                 "DT_BaseCombatCharacter" => match prop.definition.name.as_str() {
                     "m_hActiveWeapon" => player.active_weapon = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
                     _ => {}
-                }
+                },
                 _ => {}
             }
         }
     }
 
     fn handle_unknown_entity(&mut self, entity: &PacketEntity, class_name: String) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         entry.entity_content = EntityContent::Other { class_name };
         for prop in &entity.props {
             match prop.definition.name.as_str() {
@@ -729,9 +731,7 @@ impl DemoAnalyzer {
     }
 
     fn handle_demo_projectile(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         let (mut itype, mut projectile_properties) = match entry.entity_content {
             EntityContent::Pipe(projectile_properties) => (0, projectile_properties),
             EntityContent::Sticky(projectile_properties) => (1, projectile_properties),
@@ -756,9 +756,7 @@ impl DemoAnalyzer {
     }
 
     fn handle_rocket(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         let mut projectile_properties = if let EntityContent::Rocket(projectile_properties) = entry.entity_content {
             projectile_properties
         } else {
@@ -778,9 +776,7 @@ impl DemoAnalyzer {
     }
 
     fn handle_team_train_watcher(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         let (mut total_progress, mut train_speed_level, mut num_cappers, mut recede_time) = if let EntityContent::TeamTrainWatcher {
             total_progress,
             train_speed_level,
@@ -812,9 +808,7 @@ impl DemoAnalyzer {
     }
 
     fn handle_func_track_train(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         for prop in &entity.props {
             match prop.definition.name.as_str() {
                 "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -826,12 +820,10 @@ impl DemoAnalyzer {
     }
 
     fn handle_weapon(&mut self, entity: &PacketEntity) {
-        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity {
-            ..Default::default()
-        });
+        let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         let (mut id, mut name, mut owner) = match entry.entity_content {
             EntityContent::Weapon { name, id, owner } => (id, name, owner),
-            _ => (-1, Weapon::Unknown, None)
+            _ => (-1, Weapon::Unknown, None),
         };
         for prop in &entity.props {
             match prop.definition.name.as_str() {
@@ -847,7 +839,14 @@ impl DemoAnalyzer {
         }
         if name == Weapon::Unknown {
             // eprintln!("Unknown weapon: {}, {}, owner: {:?}, {}", id, self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or(""), owner, entity.entity_index);
-            entry.entity_content = EntityContent::Other { class_name: self.class_names.get(usize::from(entity.server_class)).map(|class_name| class_name.as_str()).unwrap_or("").into() };
+            entry.entity_content = EntityContent::Other {
+                class_name: self
+                    .class_names
+                    .get(usize::from(entity.server_class))
+                    .map(|class_name| class_name.as_str())
+                    .unwrap_or("")
+                    .into(),
+            };
             return;
         }
         entry.entity_content = EntityContent::Weapon { name, id, owner };

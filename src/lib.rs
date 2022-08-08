@@ -33,7 +33,7 @@ pub fn process_demos(inputs: Vec<PathBuf>) -> Vec<DemoProcessingOutput> {
                     }
                 }
             };
-            let demo = Demo::new(file);
+            let demo = Demo::owned(file);
             let (header, mut ticker) = DemoParser::new_with_analyser(demo.get_stream(), HeatmapAnalyser::default()).ticker().unwrap();
             loop {
                 match ticker.tick() {

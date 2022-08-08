@@ -23,6 +23,7 @@ use tf_demo_parser::demo::{
     vector::{Vector, VectorXY},
 };
 use tf_demo_parser::{ParserState, ReadResult, Stream};
+use std::borrow::Borrow;
 
 const MAX_PLAYER_ENTITY: u32 = 34;
 
@@ -312,7 +313,7 @@ impl MessageHandler for HeatmapAnalyser {
     fn handle_string_entry(&mut self, table: &str, _index: usize, entry: &StringTableEntry) {
         match table {
             "userinfo" => {
-                let _ = self.parse_user_info(entry.text.as_ref().map(|s| s.as_str()), entry.extra_data.as_ref().map(|data| data.data.clone()));
+                let _ = self.parse_user_info(entry.text.as_ref().map(|s| s.borrow()), entry.extra_data.as_ref().map(|data| data.data.clone()));
             }
             _ => {}
         }

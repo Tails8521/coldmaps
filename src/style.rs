@@ -16,7 +16,7 @@ impl Default for Theme {
     }
 }
 
-impl From<Theme> for Box<dyn container::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn container::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -25,7 +25,7 @@ impl From<Theme> for Box<dyn container::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn radio::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn radio::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -34,7 +34,7 @@ impl From<Theme> for Box<dyn radio::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn text_input::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn text_input::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -43,7 +43,7 @@ impl From<Theme> for Box<dyn text_input::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn button::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn button::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => light::Button.into(),
@@ -52,7 +52,7 @@ impl From<Theme> for Box<dyn button::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn scrollable::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn scrollable::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -61,7 +61,7 @@ impl From<Theme> for Box<dyn scrollable::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn slider::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn slider::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -70,7 +70,7 @@ impl From<Theme> for Box<dyn slider::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn progress_bar::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn progress_bar::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -79,7 +79,7 @@ impl From<Theme> for Box<dyn progress_bar::StyleSheet> {
     }
 }
 
-impl From<Theme> for Box<dyn checkbox::StyleSheet> {
+impl<'a> From<Theme> for Box<dyn checkbox::StyleSheet + 'a> {
     fn from(theme: Theme) -> Self {
         match theme {
             Theme::Light => Default::default(),
@@ -142,6 +142,7 @@ mod dark {
     impl radio::StyleSheet for Radio {
         fn active(&self) -> radio::Style {
             radio::Style {
+                text_color: None,
                 background: Background::Color(SURFACE),
                 dot_color: ACTIVE,
                 border_width: 1.0,
@@ -325,6 +326,7 @@ mod dark {
     impl checkbox::StyleSheet for Checkbox {
         fn active(&self, is_checked: bool) -> checkbox::Style {
             checkbox::Style {
+                text_color: None,
                 background: Background::Color(if is_checked { ACTIVE } else { SURFACE }),
                 checkmark_color: Color::WHITE,
                 border_radius: 2.0,
@@ -350,7 +352,7 @@ pub enum ResultContainer {
     Error,
 }
 
-impl From<ResultContainer> for Box<dyn container::StyleSheet> {
+impl<'a> From<ResultContainer> for Box<dyn container::StyleSheet + 'a> {
     fn from(result: ResultContainer) -> Self {
         match result {
             ResultContainer::Ok => ok::Container.into(),
@@ -398,7 +400,7 @@ pub enum ActiveButtonHighlight {
     NotHighlighted,
 }
 
-impl From<ActiveButtonHighlight> for Box<dyn button::StyleSheet> {
+impl<'a> From<ActiveButtonHighlight> for Box<dyn button::StyleSheet + 'a> {
     fn from(highlight: ActiveButtonHighlight) -> Self {
         match highlight {
             ActiveButtonHighlight::Highlighted => highlighted::Button.into(),

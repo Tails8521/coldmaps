@@ -6,7 +6,7 @@ use coldmaps::{
     },
     heatmap_analyser::Team,
 };
-use iced::{button, pick_list, scrollable, text_input, Button, Column, Container, Element, Font, HorizontalAlignment, Length, PickList, Row, Scrollable, Text, TextInput};
+use iced::{button, pick_list, scrollable, text_input, Button, Column, Container, Element, Font, alignment, Length, PickList, Row, Scrollable, Text, TextInput};
 use std::fmt::Display;
 use style::ActiveButtonHighlight;
 
@@ -19,7 +19,7 @@ fn icon(unicode: char) -> Text {
     Text::new(&unicode.to_string())
         .font(CLASS_ICONS)
         .color([0.0, 0.0, 0.0])
-        .horizontal_alignment(HorizontalAlignment::Center)
+        .horizontal_alignment(alignment::Horizontal::Center)
         .size(20)
 }
 
@@ -127,7 +127,7 @@ impl FiltersPane {
         let theme = self.theme;
         let (filters, style): (Element<_>, _) = if self.filters.is_empty() {
             (
-                Container::new(Text::new("No filter").width(Length::Fill).size(20).horizontal_alignment(HorizontalAlignment::Center))
+                Container::new(Text::new("No filter").width(Length::Fill).size(20).horizontal_alignment(alignment::Horizontal::Center))
                     .width(Length::Fill)
                     .center_y()
                     .into(),

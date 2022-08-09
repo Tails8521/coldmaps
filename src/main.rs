@@ -10,8 +10,8 @@ use gui_filters::{FilterType, FiltersPane};
 use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::{HeatmapAnalysis, Team};
 use iced::{
-    button, executor, image::Handle, pane_grid, scrollable, slider, text_input, window, Align, Application, Button, Checkbox, Column, Command, Container, Element, Font,
-    HorizontalAlignment, Image, Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Slider, Subscription, Text, TextInput,
+    button, executor, image::Handle, pane_grid, scrollable, slider, text_input, window, Application, Button, Checkbox, Column, Command, Container, Element, Font,
+    Image, Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Slider, Subscription, Text, TextInput, alignment,
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb, RgbImage};
 use pane_grid::{Axis, Pane};
@@ -29,7 +29,7 @@ fn icon(unicode: char) -> Text {
     Text::new(&unicode.to_string())
         .font(ICONS)
         .color([1.0, 0.0, 0.0])
-        .horizontal_alignment(HorizontalAlignment::Center)
+        .horizontal_alignment(alignment::Horizontal::Center)
         .size(20)
 }
 
@@ -158,7 +158,7 @@ impl DemoList {
                     Text::new("Drag and drop demo files to add them")
                         .width(Length::Fill)
                         .size(24)
-                        .horizontal_alignment(HorizontalAlignment::Center),
+                        .horizontal_alignment(alignment::Horizontal::Center),
                 )
                 .width(Length::Fill)
                 .into(),
@@ -312,7 +312,7 @@ impl SettingsPane {
                 format!("Heatmap intensity: {:.2}", self.intensity / 100.0)
             };
             let intensity_checkbox = Container::new(Checkbox::new(self.auto_intensity, "Auto", Message::AutoIntensityCheckboxToggled).style(self.theme))
-                .align_x(Align::End)
+                .align_x(alignment::Horizontal::Right)
                 .width(Length::Fill);
             let intensity_label = Row::new().spacing(10).push(Text::new(&intensity_text)).push(intensity_checkbox);
             heatmap_options = heatmap_options.push(intensity_label);
@@ -365,7 +365,7 @@ impl Preview {
                 Text::new("Drag and drop the level overview screenshot to use it")
                     .width(Length::Fill)
                     .size(24)
-                    .horizontal_alignment(HorizontalAlignment::Center)
+                    .horizontal_alignment(alignment::Horizontal::Center)
                     .into(),
                 style::ResultContainer::Error,
             )
@@ -454,7 +454,7 @@ impl Application for App {
         format!("Coldmaps {}", VERSION.unwrap_or_default())
     }
 
-    fn update(&mut self, message: Message, _clipboard: &mut iced::Clipboard) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::WindowEventOccurred(iced_native::Event::Window(iced_native::window::Event::FileDropped(path))) => {
                 if !path.is_file() {
@@ -747,7 +747,7 @@ impl Application for App {
         let pane_grid: pane_grid::PaneGrid<Message> =
             pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state| state.view().into()).on_resize(10, Message::PaneResized);
 
-        let content = Column::new().align_items(Align::Center).spacing(20).push(pane_grid);
+        let content = Column::new().align_items(iced::Alignment::Center).spacing(20).push(pane_grid);
 
         Container::new(content)
             .width(Length::Fill)

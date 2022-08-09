@@ -37,12 +37,12 @@ fn delete_icon() -> Text {
     icon('\u{F1F8}')
 }
 
-pub fn main() {
+pub fn main() -> Result<(), iced::Error> {
     let args: Vec<String> = std::env::args().collect();
     if let Some(arg) = args.get(1) {
         if arg == "--demoplayer" {
             demo_player::run().unwrap();
-            return;
+            return Ok(());
         }
     }
     App::run(Settings {
@@ -76,7 +76,7 @@ struct HeatmapImage {
 
 #[derive(Debug)]
 struct DemoFile {
-    path: PathBuf,
+    _path: PathBuf,
     file_name: String,
     delete_button: button::State,
     heatmap_analysis: HeatmapAnalysis,
@@ -454,7 +454,7 @@ impl Application for App {
         format!("Coldmaps {}", VERSION.unwrap_or_default())
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message, _clipboard: &mut iced::Clipboard) -> Command<Message> {
         match message {
             Message::WindowEventOccurred(iced_native::Event::Window(iced_native::window::Event::FileDropped(path))) => {
                 if !path.is_file() {
@@ -630,7 +630,7 @@ impl Application for App {
                         let path = demo.path;
                         let file_name = path.file_name().unwrap().to_string_lossy().to_string();
                         let demo_file = DemoFile {
-                            path,
+                            _path: path,
                             file_name,
                             heatmap_analysis,
                             delete_button: Default::default(),
@@ -745,7 +745,7 @@ impl Application for App {
 
     fn view(&mut self) -> Element<Message> {
         let pane_grid: pane_grid::PaneGrid<Message> =
-            pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state, _focus| state.view().into()).on_resize(10, Message::PaneResized);
+            pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state| state.view().into()).on_resize(10, Message::PaneResized);
 
         let content = Column::new().align_items(Align::Center).spacing(20).push(pane_grid);
 

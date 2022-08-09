@@ -1,5 +1,8 @@
+use fnv::FnvHashMap;
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
+use tf_demo_parser::demo::packet::datatable::SendTableName;
+use tf_demo_parser::demo::sendprop::{SendPropIdentifier, SendPropName};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::{
@@ -232,6 +235,7 @@ pub struct World {
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HeatmapAnalyser {
     pub state: HeatmapAnalysis,
+    prop_names: FnvHashMap<SendPropIdentifier, (SendTableName, SendPropName)>,
     user_id_map: HashMap<EntityId, UserId>,
     class_names: Vec<ServerClassName>, // indexed by ClassId
 }
@@ -319,8 +323,17 @@ impl MessageHandler for HeatmapAnalyser {
         }
     }
 
-    fn handle_data_tables(&mut self, _tables: &[ParseSendTable], server_classes: &[ServerClass]) {
+    fn handle_data_tables(&mut self, tables: &[ParseSendTable], server_classes: &[ServerClass]) {
         self.class_names = server_classes.iter().map(|class| &class.name).cloned().collect();
+
+        for table in tables {
+            for prop_def in &table.props {
+                self.prop_names.insert(
+                    prop_def.identifier(),
+                    (table.name.clone(), prop_def.name.clone()),
+                );
+            }
+        }
     }
 
     fn into_output(self, _state: &ParserState) -> Self::Output {
@@ -349,14 +362,16 @@ impl HeatmapAnalyser {
 
     pub fn handle_player_resource(&mut self, entity: &PacketEntity) {
         for prop in &entity.props {
-            if let Ok(player_id) = u32::from_str(prop.definition.name.as_str()) {
-                let entity_id = EntityId::from(player_id);
-                if let Some(player) = self.state.player_entities.iter_mut().find(|player| player.entity == entity_id) {
-                    match prop.definition.owner_table.as_str() {
-                        "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
-                        "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                        "m_iPlayerClass" => player.class = Class::new(i64::try_from(&prop.value).unwrap_or_default()),
-                        _ => {}
+            if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                if let Ok(player_id) = u32::from_str(prop_name.as_str()) {
+                    let entity_id = EntityId::from(player_id);
+                    if let Some(player) = self.state.player_entities.iter_mut().find(|player| player.entity == entity_id) {
+                        match table_name.as_str() {
+                            "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                            "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                            "m_iPlayerClass" => player.class = Class::new(i64::try_from(&prop.value).unwrap_or_default()),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -367,25 +382,27 @@ impl HeatmapAnalyser {
         let player = self.state.get_or_create_player_entity(entity.entity_index);
 
         for prop in &entity.props {
-            match prop.definition.owner_table.as_str() {
-                "DT_BasePlayer" => match prop.definition.name.as_str() {
-                    "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                    "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                    "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
+            if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match table_name.as_str() {
+                    "DT_BasePlayer" => match prop_name.as_str() {
+                        "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                        "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                        "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
+                        _ => {}
+                    },
+                    "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop_name.as_str() {
+                        "m_vecOrigin" => {
+                            let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
+                            player.position.x = pos_xy.x;
+                            player.position.y = pos_xy.y;
+                        }
+                        "m_vecOrigin[2]" => player.position.z = f32::try_from(&prop.value).unwrap_or_default(),
+                        "m_angEyeAngles[0]" => player.view_angle_vertical = f32::try_from(&prop.value).unwrap_or_default(),
+                        "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
+                        _ => {}
+                    },
                     _ => {}
-                },
-                "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop.definition.name.as_str() {
-                    "m_vecOrigin" => {
-                        let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
-                        player.position.x = pos_xy.x;
-                        player.position.y = pos_xy.y;
-                    }
-                    "m_vecOrigin[2]" => player.position.z = f32::try_from(&prop.value).unwrap_or_default(),
-                    "m_angEyeAngles[0]" => player.view_angle_vertical = f32::try_from(&prop.value).unwrap_or_default(),
-                    "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
-                    _ => {}
-                },
-                _ => {}
+                }
             }
         }
     }
@@ -410,39 +427,47 @@ impl HeatmapAnalyser {
     }
 
     fn handle_sentry_entity(&mut self, entity: &PacketEntity) {
-        let entry = self
-            .state
-            .other_entities
-            .entry(entity.entity_index)
-            .or_insert_with(|| OtherEntity::Sentry { position: None });
-        let mut position = if let OtherEntity::Sentry { position } = *entry { position } else { None };
-        for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
-                _ => {}
+        for prop in entity.props() {
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                let entry = self
+                    .state
+                    .other_entities
+                    .entry(entity.entity_index)
+                    .or_insert_with(|| OtherEntity::Sentry { position: None });
+                let mut position = if let OtherEntity::Sentry { position } = *entry { position } else { None };
+                for prop in &entity.props {
+                    match prop_name.as_str() {
+                        "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
+                        _ => {}
+                    }
+                }
+                *entry = OtherEntity::Sentry { position };
             }
         }
-        *entry = OtherEntity::Sentry { position };
     }
 
     fn handle_sentry_rocket_entity(&mut self, entity: &PacketEntity) {
-        let entry = self
-            .state
-            .other_entities
-            .entry(entity.entity_index)
-            .or_insert_with(|| OtherEntity::SentryRocket { sentry: None });
-        let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry { sentry } else { None };
-        for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_hOwnerEntity" => {
-                    let handle = i64::try_from(&prop.value).unwrap_or_default();
-                    let entity_id = handle_to_entity_index(handle);
-                    sentry = entity_id.map(|id| id.get().into());
+        for prop in entity.props() {
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                let entry = self
+                    .state
+                    .other_entities
+                    .entry(entity.entity_index)
+                    .or_insert_with(|| OtherEntity::SentryRocket { sentry: None });
+                let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry { sentry } else { None };
+                for prop in &entity.props {
+                    match prop_name.as_str() {
+                        "m_hOwnerEntity" => {
+                            let handle = i64::try_from(&prop.value).unwrap_or_default();
+                            let entity_id = handle_to_entity_index(handle);
+                            sentry = entity_id.map(|id| id.get().into());
+                        }
+                        _ => {}
+                    }
                 }
-                _ => {}
+                *entry = OtherEntity::SentryRocket { sentry };
             }
         }
-        *entry = OtherEntity::SentryRocket { sentry };
     }
 
     fn handle_user_message(&mut self, message: &UserMessage, tick: u32) {

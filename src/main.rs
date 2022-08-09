@@ -15,6 +15,7 @@ use iced::{
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb, RgbImage};
 use pane_grid::{Axis, Pane};
+use rfd::AsyncFileDialog;
 use std::{mem, path::PathBuf, time::Instant};
 
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -468,7 +469,7 @@ impl Application for App {
                     // try to load it as an image
                     if let Ok(reader) = Reader::open(&path) {
                         if let Ok(image) = reader.decode() {
-                            let image = image.into_rgb();
+                            let image = image.into_rgb8();
                             return Command::perform(async { image }, Message::LevelImageSet);
                         }
                     }
@@ -927,8 +928,5 @@ async fn process_demos_async<'a>(inputs: Vec<PathBuf>) -> TimedResult<Vec<DemoPr
 }
 
 async fn open_save_dialog() -> Option<PathBuf> {
-    if let Ok(Ok(nfd2::Response::Okay(path))) = tokio::task::spawn_blocking(move || nfd2::open_save_dialog(None, None)).await {
-        return Some(path);
-    }
-    None
+    AsyncFileDialog::new().add_filter("image", &["png"]).save_file().await.map(|handle| handle.path().into())
 }

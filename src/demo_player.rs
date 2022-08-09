@@ -1,5 +1,6 @@
 mod weapons;
 
+use fnv::FnvHashMap;
 use io::{BufRead, BufReader, BufWriter, LineWriter, StdoutLock};
 use std::{
     borrow::Cow,
@@ -15,8 +16,8 @@ use std::{num::NonZeroU32, str::FromStr};
 use coldmaps::heatmap_analyser::{handle_to_entity_index, Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo};
 use serde::Serialize;
 use tf_demo_parser::{
-    demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::message::packetentities::PVS,
-    demo::message::Message, demo::packet::datatable::ParseSendTable, demo::packet::datatable::ServerClass, demo::packet::datatable::ServerClassName,
+    demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::{message::packetentities::PVS, sendprop::SendPropIdentifier},
+    demo::message::Message, demo::packet::datatable::{ParseSendTable, SendTableName}, demo::{packet::datatable::ServerClass, sendprop::SendPropName}, demo::packet::datatable::ServerClassName,
     demo::packet::stringtable::StringTableEntry, demo::parser::handler::BorrowMessageHandler, demo::parser::DemoTicker, demo::parser::MessageHandler, demo::vector::Vector,
     demo::vector::VectorXY, Demo, DemoParser, MessageType, ParseError, ParserState, ReadResult, Stream,
 };
@@ -502,6 +503,7 @@ impl DemoAnalysis {
 #[derive(Default, Clone, Debug, Serialize, PartialEq)]
 struct DemoAnalyzer {
     state: DemoAnalysis,
+    prop_names: FnvHashMap<SendPropIdentifier, (SendTableName, SendPropName)>,
     class_names: Vec<ServerClassName>,
     tick_offset: u32,
 }
@@ -664,14 +666,16 @@ impl DemoAnalyzer {
 
     fn handle_player_resource(&mut self, entity: &PacketEntity) {
         for prop in &entity.props {
-            if let Ok(player_id) = u32::from_str(prop.definition.name.as_str()) {
-                let entity_id = EntityId::from(player_id);
-                if let Some(player) = self.state.player_entities.iter_mut().find(|player| player.entity == entity_id) {
-                    match prop.definition.owner_table.as_str() {
-                        "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
-                        "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                        "m_iPlayerClass" => player.class = Class::new(i64::try_from(&prop.value).unwrap_or_default()),
-                        _ => {}
+            if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                if let Ok(player_id) = u32::from_str(prop_name.as_str()) {
+                    let entity_id = EntityId::from(player_id);
+                    if let Some(player) = self.state.player_entities.iter_mut().find(|player| player.entity == entity_id) {
+                        match table_name.as_str() {
+                            "m_iTeam" => player.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                            "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                            "m_iPlayerClass" => player.class = Class::new(i64::try_from(&prop.value).unwrap_or_default()),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -682,38 +686,40 @@ impl DemoAnalyzer {
         let player = self.state.get_or_create_player_entity(entity.entity_index);
 
         for prop in &entity.props {
-            match prop.definition.owner_table.as_str() {
-                "DT_BasePlayer" => match prop.definition.name.as_str() {
-                    "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                    "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
-                    "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
-                    // "m_fFlags" => {
-                    //     match &prop.value {
-                    //         tf_demo_parser::demo::sendprop::SendPropValue::Integer(x) => {
-                    //             // TODO investigate, 1 = on ground, 2 = ducking, etc.
-                    //             eprintln!("{}", x);
-                    //         },
-                    //         _ => {}
-                    //     }
-                    // }
+            if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match table_name.as_str() {
+                    "DT_BasePlayer" => match prop_name.as_str() {
+                        "m_iHealth" => player.health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                        "m_iMaxHealth" => player.max_health = i64::try_from(&prop.value).unwrap_or_default() as u16,
+                        "m_lifeState" => player.state = PlayerState::new(i64::try_from(&prop.value).unwrap_or_default()),
+                        // "m_fFlags" => {
+                        //     match &prop.value {
+                        //         tf_demo_parser::demo::sendprop::SendPropValue::Integer(x) => {
+                        //             // TODO investigate, 1 = on ground, 2 = ducking, etc.
+                        //             eprintln!("{}", x);
+                        //         },
+                        //         _ => {}
+                        //     }
+                        // }
+                        _ => {}
+                    },
+                    "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop_name.as_str() {
+                        "m_vecOrigin" => {
+                            let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
+                            player.position.x = pos_xy.x;
+                            player.position.y = pos_xy.y;
+                        }
+                        "m_vecOrigin[2]" => player.position.z = f32::try_from(&prop.value).unwrap_or_default(),
+                        "m_angEyeAngles[0]" => player.view_angle_vertical = f32::try_from(&prop.value).unwrap_or_default(),
+                        "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
+                        _ => {}
+                    },
+                    "DT_BaseCombatCharacter" => match prop_name.as_str() {
+                        "m_hActiveWeapon" => player.active_weapon = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
+                        _ => {}
+                    },
                     _ => {}
-                },
-                "DT_TFLocalPlayerExclusive" | "DT_TFNonLocalPlayerExclusive" => match prop.definition.name.as_str() {
-                    "m_vecOrigin" => {
-                        let pos_xy = VectorXY::try_from(&prop.value).unwrap_or_default();
-                        player.position.x = pos_xy.x;
-                        player.position.y = pos_xy.y;
-                    }
-                    "m_vecOrigin[2]" => player.position.z = f32::try_from(&prop.value).unwrap_or_default(),
-                    "m_angEyeAngles[0]" => player.view_angle_vertical = f32::try_from(&prop.value).unwrap_or_default(),
-                    "m_angEyeAngles[1]" => player.view_angle_horizontal = f32::try_from(&prop.value).unwrap_or_default(),
-                    _ => {}
-                },
-                "DT_BaseCombatCharacter" => match prop.definition.name.as_str() {
-                    "m_hActiveWeapon" => player.active_weapon = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
-                    _ => {}
-                },
-                _ => {}
+                }
             }
         }
     }
@@ -722,10 +728,12 @@ impl DemoAnalyzer {
         let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         entry.entity_content = EntityContent::Other { class_name };
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    _ => {}
+                }
             }
         }
     }
@@ -738,14 +746,16 @@ impl DemoAnalyzer {
             _ => (-1, Default::default()),
         };
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_iType" => itype = i64::try_from(&prop.value).unwrap_or(-1),
-                "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
-                "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
-                // "m_hThrower" => eprintln!("Demo {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_iType" => itype = i64::try_from(&prop.value).unwrap_or(-1),
+                    "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
+                    "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                    // "m_hThrower" => eprintln!("Demo {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
+                    _ => {}
+                }
             }
         }
         entry.entity_content = match itype {
@@ -763,13 +773,15 @@ impl DemoAnalyzer {
             Default::default()
         };
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
-                "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
-                // "m_hOwnerEntity" => eprintln!("Soldier {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_bCritical" => projectile_properties.crit = i64::try_from(&prop.value).unwrap_or_default() != 0,
+                    "m_iTeamNum" => projectile_properties.team = Team::new(i64::try_from(&prop.value).unwrap_or_default()),
+                    // "m_hOwnerEntity" => eprintln!("Soldier {}: {}", i64::try_from(&prop.value).unwrap_or_default() & 0b111_1111_1111, entity.entity_index),
+                    _ => {}
+                }
             }
         }
         entry.entity_content = EntityContent::Rocket(projectile_properties);
@@ -789,14 +801,16 @@ impl DemoAnalyzer {
             Default::default()
         };
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_flTotalProgress" => total_progress = f32::try_from(&prop.value).unwrap_or_default(),
-                "m_iTrainSpeedLevel" => train_speed_level = i64::try_from(&prop.value).unwrap_or_default() as i32,
-                "m_nNumCappers" => num_cappers = i64::try_from(&prop.value).unwrap_or_default() as i32,
-                "m_flRecedeTime" => recede_time = f32::try_from(&prop.value).unwrap_or_default(),
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_flTotalProgress" => total_progress = f32::try_from(&prop.value).unwrap_or_default(),
+                    "m_iTrainSpeedLevel" => train_speed_level = i64::try_from(&prop.value).unwrap_or_default() as i32,
+                    "m_nNumCappers" => num_cappers = i64::try_from(&prop.value).unwrap_or_default() as i32,
+                    "m_flRecedeTime" => recede_time = f32::try_from(&prop.value).unwrap_or_default(),
+                    _ => {}
+                }
             }
         }
         entry.entity_content = EntityContent::TeamTrainWatcher {
@@ -810,10 +824,12 @@ impl DemoAnalyzer {
     fn handle_func_track_train(&mut self, entity: &PacketEntity) {
         let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    _ => {}
+                }
             }
         }
         entry.entity_content = EntityContent::Cart;
@@ -826,12 +842,14 @@ impl DemoAnalyzer {
             _ => (-1, Weapon::Unknown, None),
         };
         for prop in &entity.props {
-            match prop.definition.name.as_str() {
-                "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
-                "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
-                "moveparent" => owner = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
-                "m_iItemDefinitionIndex" => id = i64::try_from(&prop.value).unwrap_or(-1) as i32, // TODO: for some reason this is not always filled :(
-                _ => {}
+            if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
+                match prop_name.as_str() {
+                    "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
+                    "moveparent" => owner = handle_to_entity_index(i64::try_from(&prop.value).unwrap_or_default()),
+                    "m_iItemDefinitionIndex" => id = i64::try_from(&prop.value).unwrap_or(-1) as i32, // TODO: for some reason this is not always filled :(
+                    _ => {}
+                }
             }
         }
         if name == Weapon::Unknown {

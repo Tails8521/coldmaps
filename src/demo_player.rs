@@ -677,7 +677,7 @@ impl DemoAnalyzer {
     }
 
     fn handle_player_resource(&mut self, entity: &PacketEntity) {
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 if let Ok(player_id) = u32::from_str(prop_name.as_str()) {
                     let entity_id = EntityId::from(player_id);
@@ -697,7 +697,7 @@ impl DemoAnalyzer {
     fn handle_player_entity(&mut self, entity: &PacketEntity) {
         let player = self.state.get_or_create_player_entity(entity.entity_index);
 
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match table_name.as_str() {
                     "DT_BasePlayer" => match prop_name.as_str() {
@@ -739,7 +739,7 @@ impl DemoAnalyzer {
     fn handle_unknown_entity(&mut self, entity: &PacketEntity, class_name: String) {
         let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
         entry.entity_content = EntityContent::Other { class_name };
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -757,7 +757,7 @@ impl DemoAnalyzer {
             EntityContent::Sticky(projectile_properties) => (1, projectile_properties),
             _ => (-1, Default::default()),
         };
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -784,7 +784,7 @@ impl DemoAnalyzer {
         } else {
             Default::default()
         };
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -812,7 +812,7 @@ impl DemoAnalyzer {
         } else {
             Default::default()
         };
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -835,7 +835,7 @@ impl DemoAnalyzer {
 
     fn handle_func_track_train(&mut self, entity: &PacketEntity) {
         let entry = self.state.other_entities.entry(entity.entity_index).or_insert_with(|| OtherEntity { ..Default::default() });
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),
@@ -853,7 +853,7 @@ impl DemoAnalyzer {
             EntityContent::Weapon { name, id, owner } => (id, name, owner),
             _ => (-1, Weapon::Unknown, None),
         };
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((_table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match prop_name.as_str() {
                     "m_vecOrigin" => entry.position = Vector::try_from(&prop.value).unwrap_or_default(),

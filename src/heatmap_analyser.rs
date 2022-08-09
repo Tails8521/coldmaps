@@ -358,7 +358,7 @@ impl HeatmapAnalyser {
     }
 
     pub fn handle_player_resource(&mut self, entity: &PacketEntity) {
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 if let Ok(player_id) = u32::from_str(prop_name.as_str()) {
                     let entity_id = EntityId::from(player_id);
@@ -378,7 +378,7 @@ impl HeatmapAnalyser {
     pub fn handle_player_entity(&mut self, entity: &PacketEntity) {
         let player = self.state.get_or_create_player_entity(entity.entity_index);
 
-        for prop in &entity.props {
+        for prop in entity.props() {
             if let Some((table_name, prop_name)) = self.prop_names.get(&prop.identifier) {
                 match table_name.as_str() {
                     "DT_BasePlayer" => match prop_name.as_str() {
@@ -432,11 +432,9 @@ impl HeatmapAnalyser {
                     .entry(entity.entity_index)
                     .or_insert_with(|| OtherEntity::Sentry { position: None });
                 let mut position = if let OtherEntity::Sentry { position } = *entry { position } else { None };
-                for prop in &entity.props {
-                    match prop_name.as_str() {
-                        "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
-                        _ => {}
-                    }
+                match prop_name.as_str() {
+                    "m_vecOrigin" => position = Some(Vector::try_from(&prop.value).unwrap_or_default()),
+                    _ => {}
                 }
                 *entry = OtherEntity::Sentry { position };
             }
@@ -452,15 +450,13 @@ impl HeatmapAnalyser {
                     .entry(entity.entity_index)
                     .or_insert_with(|| OtherEntity::SentryRocket { sentry: None });
                 let mut sentry = if let OtherEntity::SentryRocket { sentry } = *entry { sentry } else { None };
-                for prop in &entity.props {
-                    match prop_name.as_str() {
-                        "m_hOwnerEntity" => {
-                            let handle = i64::try_from(&prop.value).unwrap_or_default();
-                            let entity_id = handle_to_entity_index(handle);
-                            sentry = entity_id.map(|id| id.get().into());
-                        }
-                        _ => {}
+                match prop_name.as_str() {
+                    "m_hOwnerEntity" => {
+                        let handle = i64::try_from(&prop.value).unwrap_or_default();
+                        let entity_id = handle_to_entity_index(handle);
+                        sentry = entity_id.map(|id| id.get().into());
                     }
+                    _ => {}
                 }
                 *entry = OtherEntity::SentryRocket { sentry };
             }

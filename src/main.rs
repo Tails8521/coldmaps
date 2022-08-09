@@ -10,8 +10,8 @@ use gui_filters::{FilterType, FiltersPane};
 use heatmap::{CoordsType, HeatmapType};
 use heatmap_analyser::{HeatmapAnalysis, Team};
 use iced::{
-    button, executor, image::Handle, pane_grid, scrollable, slider, text_input, window, Application, Button, Checkbox, Column, Command, Container, Element, Font,
-    Image, Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Slider, Subscription, Text, TextInput, alignment,
+    alignment, button, executor, image::Handle, pane_grid, scrollable, slider, text_input, window, Application, Button, Checkbox, Column, Command, Container, Element, Font, Image,
+    Length, Point, Radio, Rectangle, Row, Scrollable, Settings, Size, Slider, Subscription, Text, TextInput,
 };
 use image::{io::Reader, ImageBuffer, Pixel, Rgb, RgbImage};
 use pane_grid::{Axis, Pane};
@@ -744,8 +744,7 @@ impl Application for App {
     }
 
     fn view(&mut self) -> Element<Message> {
-        let pane_grid: pane_grid::PaneGrid<Message> =
-            pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state| state.view().into()).on_resize(10, Message::PaneResized);
+        let pane_grid: pane_grid::PaneGrid<Message> = pane_grid::PaneGrid::new(&mut self.pane_grid_state, |_pane, state| state.view().into()).on_resize(10, Message::PaneResized);
 
         let content = Column::new().align_items(iced::Alignment::Center).spacing(20).push(pane_grid);
 

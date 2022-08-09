@@ -15,14 +15,26 @@ use std::{num::NonZeroU32, str::FromStr};
 
 use coldmaps::heatmap_analyser::{handle_to_entity_index, Class, HeatmapAnalyser, HeatmapAnalysis, PlayerState, Spawn, Team, UserId, UserInfo};
 use serde::Serialize;
+use std::borrow::Borrow;
 use tf_demo_parser::{
-    demo::gamevent::GameEvent, demo::header::Header, demo::message::packetentities::EntityId, demo::message::packetentities::PacketEntity, demo::{message::packetentities::PVS, sendprop::SendPropIdentifier},
-    demo::message::Message, demo::packet::datatable::{ParseSendTable, SendTableName}, demo::{packet::datatable::ServerClass, sendprop::SendPropName}, demo::packet::datatable::ServerClassName,
-    demo::packet::stringtable::StringTableEntry, demo::parser::handler::BorrowMessageHandler, demo::parser::DemoTicker, demo::parser::MessageHandler, demo::vector::Vector,
-    demo::vector::VectorXY, Demo, DemoParser, MessageType, ParseError, ParserState, ReadResult, Stream,
+    demo::gamevent::GameEvent,
+    demo::header::Header,
+    demo::message::packetentities::EntityId,
+    demo::message::packetentities::PacketEntity,
+    demo::message::Message,
+    demo::packet::datatable::ServerClassName,
+    demo::packet::datatable::{ParseSendTable, SendTableName},
+    demo::packet::stringtable::StringTableEntry,
+    demo::parser::handler::BorrowMessageHandler,
+    demo::parser::DemoTicker,
+    demo::parser::MessageHandler,
+    demo::vector::Vector,
+    demo::vector::VectorXY,
+    demo::{message::packetentities::PVS, sendprop::SendPropIdentifier},
+    demo::{packet::datatable::ServerClass, sendprop::SendPropName},
+    Demo, DemoParser, MessageType, ParseError, ParserState, ReadResult, Stream,
 };
 use weapons::Weapon;
-use std::borrow::Borrow;
 
 const SECTION_SIZE: usize = 1024;
 const SHOW_UNKNOWN_ENTITIES: bool = false;

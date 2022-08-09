@@ -1,8 +1,7 @@
 use fnv::FnvHashMap;
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-use tf_demo_parser::demo::packet::datatable::SendTableName;
-use tf_demo_parser::demo::sendprop::{SendPropIdentifier, SendPropName};
+use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::{
@@ -12,10 +11,12 @@ use std::{
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntity};
 use tf_demo_parser::demo::message::usermessage::{ChatMessageKind, SayText2Message, UserMessage};
 use tf_demo_parser::demo::message::{Message, MessageType};
+use tf_demo_parser::demo::packet::datatable::SendTableName;
 use tf_demo_parser::demo::packet::{
     datatable::{ParseSendTable, ServerClass, ServerClassName},
     stringtable::StringTableEntry,
 };
+use tf_demo_parser::demo::sendprop::{SendPropIdentifier, SendPropName};
 use tf_demo_parser::demo::{
     gameevent_gen::{GameEvent, PlayerDeathEvent, PlayerSpawnEvent, TeamPlayRoundWinEvent},
     message::packetentities::PVS,
@@ -26,7 +27,6 @@ use tf_demo_parser::demo::{
     vector::{Vector, VectorXY},
 };
 use tf_demo_parser::{ParserState, ReadResult, Stream};
-use std::borrow::Borrow;
 
 const MAX_PLAYER_ENTITY: u32 = 34;
 
@@ -328,10 +328,7 @@ impl MessageHandler for HeatmapAnalyser {
 
         for table in tables {
             for prop_def in &table.props {
-                self.prop_names.insert(
-                    prop_def.identifier(),
-                    (table.name.clone(), prop_def.name.clone()),
-                );
+                self.prop_names.insert(prop_def.identifier(), (table.name.clone(), prop_def.name.clone()));
             }
         }
     }

@@ -6,7 +6,7 @@ use coldmaps::{
     },
     heatmap_analyser::Team,
 };
-use iced::{button, pick_list, scrollable, text_input, Button, Column, Container, Element, Font, alignment, Length, PickList, Row, Scrollable, Text, TextInput};
+use iced::{alignment, button, pick_list, scrollable, text_input, Button, Column, Container, Element, Font, Length, PickList, Row, Scrollable, Text, TextInput};
 use std::fmt::Display;
 use style::ActiveButtonHighlight;
 

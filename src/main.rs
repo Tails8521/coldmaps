@@ -1,5 +1,7 @@
+use chat::format_chat_messages;
 use coldmaps::*;
 
+mod chat;
 mod demo_player;
 mod demostf;
 mod gui_filters;
@@ -25,16 +27,20 @@ const ICONS: Font = Font::External {
     bytes: include_bytes!("../fonts/icons.ttf"),
 };
 
-fn icon(unicode: char) -> Text {
+fn icon(unicode: char, color: [f32; 3]) -> Text {
     Text::new(&unicode.to_string())
         .font(ICONS)
-        .color([1.0, 0.0, 0.0])
+        .color(color)
         .horizontal_alignment(alignment::Horizontal::Center)
         .size(20)
 }
 
 fn delete_icon() -> Text {
-    icon('\u{F1F8}')
+    icon('\u{F1F8}', [1.0, 0.0, 0.0])
+}
+
+fn chat_preview_icon() -> Text {
+    icon('\u{E802}', [1.0, 1.0, 1.0])
 }
 
 pub fn main() -> Result<(), iced::Error> {
@@ -79,6 +85,7 @@ struct DemoFile {
     _path: PathBuf,
     file_name: String,
     delete_button: button::State,
+    chat_preview_button: button::State,
     heatmap_analysis: HeatmapAnalysis,
 }
 
@@ -87,6 +94,7 @@ enum Message {
     WindowEventOccurred(iced_native::Event),
     PaneResized(pane_grid::ResizeEvent),
     DemoRemoved(usize),
+    ChatPreview(usize),
     ThemeChanged(style::Theme),
     CoordsTypeChanged(CoordsType),
     HeatmapTypeChanged(HeatmapType),
@@ -172,7 +180,14 @@ impl DemoList {
                     .enumerate()
                     .fold(Column::new().spacing(10), |column, (index, demo)| {
                         let delete_button = Button::new(&mut demo.delete_button, delete_icon()).style(theme).on_press(Message::DemoRemoved(index));
-                        let row = Row::new().push(delete_button).push(Text::new(&demo.file_name).size(20));
+                        let chat_preview_button = Button::new(&mut demo.chat_preview_button, chat_preview_icon())
+                            .style(theme)
+                            .on_press(Message::ChatPreview(index));
+                        let row = Row::new()
+                            .spacing(2)
+                            .push(delete_button)
+                            .push(chat_preview_button)
+                            .push(Text::new(&demo.file_name).size(20));
                         column.push(row)
                     })
                     .into(),
@@ -408,6 +423,7 @@ impl LogPane {
     }
 
     fn log(&mut self, message: &str) {
+        println!("{}", message);
         self.log.push_str(message);
         self.log.push('\n');
         // TODO replace this by a cleaner way to scroll down once possible
@@ -546,6 +562,19 @@ impl Application for App {
                 self.show_stats();
                 self.try_generate_heatmap();
             }
+            Message::ChatPreview(index) => {
+                let demo_list = self.get_demo_list_pane_mut();
+                let demo = &demo_list.demo_files[index];
+                let messages = format_chat_messages(&demo.heatmap_analysis);
+                let header_message = format!("Chat log of {}:", demo.file_name);
+                self.log("");
+                self.log(&header_message);
+                self.log("======================");
+                for message in messages {
+                    self.log(&message);
+                }
+                self.log("======================");
+            }
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
                 self.get_demo_list_pane_mut().theme = theme;
@@ -634,6 +663,7 @@ impl Application for App {
                             file_name,
                             heatmap_analysis,
                             delete_button: Default::default(),
+                            chat_preview_button: Default::default(),
                         };
                         demo_list.demo_files.push(demo_file);
                     }

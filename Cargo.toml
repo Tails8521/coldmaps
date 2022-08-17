@@ -1,6 +1,6 @@
 [package]
 name = "coldmaps"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Tails8521 <tails8521@gmail.com>"]
 edition = "2021"
 

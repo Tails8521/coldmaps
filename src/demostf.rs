@@ -34,9 +34,9 @@ pub async fn get_image(map: &str) -> Result<Option<RgbImage>, reqwest::Error> {
 
 #[derive(Debug, Deserialize)]
 struct Boundary {
-    #[serde(rename = "boundaryMin")]
+    #[serde(rename = "boundary_min")]
     min: Point,
-    #[serde(rename = "boundaryMax")]
+    #[serde(rename = "boundary_max")]
     max: Point,
 }
 

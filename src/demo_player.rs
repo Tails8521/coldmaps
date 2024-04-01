@@ -37,7 +37,7 @@ use tf_demo_parser::{
 use weapons::Weapon;
 
 const SECTION_SIZE: usize = 1024;
-const SHOW_UNKNOWN_ENTITIES: bool = false;
+const SHOW_UNKNOWN_ENTITIES: bool = true;
 
 #[derive(Debug, Serialize)]
 enum Command {
@@ -48,6 +48,7 @@ enum Command {
     FrameToTick,
     Analysis,
     Prefetch(bool),
+    DumpUnknown(usize),
 }
 
 impl Command {
@@ -78,6 +79,11 @@ impl Command {
             if *command == "prefetch" {
                 if let Ok(prefetch) = arg.parse() {
                     return Some(Self::Prefetch(prefetch));
+                }
+            }
+            if command.starts_with("dump") {
+                if let Ok(frame) = arg.parse() {
+                    return Some(Self::DumpUnknown(frame));
                 }
             }
         }
@@ -406,6 +412,27 @@ pub(crate) fn run() -> Result<(), Box<dyn Error>> {
                         output_writer.write_result("Prefetching disabled")?;
                     }
                 }
+                Command::DumpUnknown(frame) => {
+                    if let Some(DemoPlayerState { player, frame_to_tick, .. }) = demo_player_state.as_mut() {
+                        if frame < frame_to_tick.len() {
+                            let section_idx = frame / SECTION_SIZE;
+                            let frame_idx = frame % SECTION_SIZE;
+                            let section = &mut player.sections[section_idx];
+                            let mut ticker = section.ticker.clone();
+                            for _ in 0..frame_idx {
+                                ticker.tick().unwrap_or_default();
+                            }
+                            dbg!(&ticker.state().other_entities.iter().filter(|elm| elm.1.position.x != 0.0 && elm.1.position.y != 0.0 && elm.1.position.z != 0.0
+                                && elm.1.entity_content != EntityContent::Other { class_name: String::from("CTFWearable") }
+                                && elm.1.entity_content != EntityContent::Other { class_name: String::from("CTFRagdoll") }
+                            ).collect::<Vec<_>>());
+                        } else {
+                            output_writer.write_error("Seeking to a frame out of bound".into())?;
+                        }
+                    } else {
+                        output_writer.write_error("No demo loaded".into())?;
+                    }
+                }
             }
         } else {
             output_writer.write_error(format!("Can't parse command: \"{}\"", &line).into())?;
@@ -569,8 +596,14 @@ impl MessageHandler for DemoAnalyzer {
         }
     }
 
-    fn handle_data_tables(&mut self, _tables: &[ParseSendTable], server_classes: &[ServerClass]) {
+    fn handle_data_tables(&mut self, tables: &[ParseSendTable], server_classes: &[ServerClass]) {
         self.class_names = server_classes.iter().map(|class| &class.name).cloned().collect();
+
+        for table in tables {
+            for prop_def in &table.props {
+                self.prop_names.insert(prop_def.identifier(), (table.name.clone(), prop_def.name.clone()));
+            }
+        }
     }
 }
 
@@ -746,6 +779,15 @@ impl DemoAnalyzer {
                     "m_angRotation" => entry.rotation = Vector::try_from(&prop.value).unwrap_or_default(),
                     _ => {}
                 }
+                // if prop_name.as_str() == "m_vecOrigin" || prop_name.as_str() == "m_angRotation" {
+                //     if let Ok(value) = Vector::try_from(&prop.value) {
+                //         if value.x == 0.0 && value.y == 0.0 && value.z == 0.0 {continue;}
+                //         dbg!(value);
+                //         dbg!(&self.state);
+                //         panic!("");
+
+                //     }
+                // }
             }
         }
     }

@@ -211,7 +211,7 @@ impl Death {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Round {
-    winner: Team,
+    pub winner: Team,
     length: f32,
     end_tick: u32,
 }

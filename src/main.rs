@@ -874,13 +874,21 @@ impl App {
     fn show_stats(&mut self) {
         let demo_list = self.get_demo_list_pane();
         let death_count: usize = demo_list.demo_files.iter().map(|demo_file| demo_file.heatmap_analysis.deaths.len()).sum();
+        let round_count: usize = demo_list.demo_files.iter().map(|demo_file| demo_file.heatmap_analysis.rounds.len()).sum();
+        let blu_wins: usize = demo_list.demo_files.iter().map(|demo_file| demo_file.heatmap_analysis.rounds.iter().filter(|round| round.winner == Team::Blu).count()).sum();
+        let red_wins: usize = demo_list.demo_files.iter().map(|demo_file| demo_file.heatmap_analysis.rounds.iter().filter(|round| round.winner == Team::Red).count()).sum();
         let demo_count = demo_list.demo_files.len();
         self.log(&format!(
-            "Stats: {} death{}, {} demo{}",
+            "Stats: {} death{}, {} demo{}\nRound count: {}, Blu wins: {} ({:.2}%), Red wins: {} ({:.2}%)",
             death_count,
             if death_count > 1 { "s" } else { "" },
             demo_count,
             if demo_count > 1 { "s" } else { "" },
+            round_count,
+            blu_wins,
+            blu_wins as f32 * 100.0 / round_count as f32,
+            red_wins,
+            red_wins as f32 * 100.0 / round_count as f32,
         ));
     }
     fn try_generate_heatmap(&mut self) {

@@ -31,16 +31,16 @@ use tf_demo_parser::{ParserState, ReadResult, Stream};
 const MAX_PLAYER_ENTITY: u32 = 34;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChatMassage {
+pub struct ChatMessage {
     pub kind: ChatMessageKind,
     pub from: String,
     pub text: String,
     pub tick: u32,
 }
 
-impl ChatMassage {
+impl ChatMessage {
     pub fn from_message(message: &SayText2Message, tick: u32) -> Self {
-        ChatMassage {
+        ChatMessage {
             kind: message.kind,
             from: message.from.clone().unwrap_or_default(),
             text: message.text.clone(),
@@ -470,7 +470,7 @@ impl HeatmapAnalyser {
                     self.change_name(from, text_message.text.clone());
                 }
             } else {
-                self.state.chat.push(ChatMassage::from_message(text_message, tick));
+                self.state.chat.push(ChatMessage::from_message(text_message, tick));
             }
         }
     }
@@ -587,7 +587,7 @@ pub struct HeatmapAnalysis {
     pub tick_offset: u32,
     pub current_tick: u32,
     pub interval_per_tick: f32,
-    pub chat: Vec<ChatMassage>,
+    pub chat: Vec<ChatMessage>,
     pub users: BTreeMap<UserId, UserInfo>,
     pub deaths: Vec<Death>,
     pub rounds: Vec<Round>,

@@ -105,6 +105,7 @@ enum Message {
     UseSentryPositionCheckboxToggled(bool),
     IntensityChanged(f32),
     RadiusChanged(f32),
+    DesaturateChanged(f32),
     ProcessDemosDone(TimedResult<Vec<DemoProcessingOutput>>),
     ExportImagePressed,
     ImageNameSelected(Option<PathBuf>),
@@ -231,6 +232,8 @@ struct SettingsPane {
     intensity: f32,
     radius_state: slider::State,
     radius: f32,
+    desaturate_state: slider::State,
+    desaturate: f32,
 }
 
 impl Default for SettingsPane {
@@ -258,6 +261,8 @@ impl Default for SettingsPane {
             intensity: 50.0,
             radius_state: Default::default(),
             radius: 50.0,
+            desaturate_state: Default::default(),
+            desaturate: 0.0,
         }
     }
 }
@@ -339,6 +344,9 @@ impl SettingsPane {
             let radius_slider = Slider::new(&mut self.radius_state, 1.0..=100.0, self.radius, Message::RadiusChanged).style(self.theme);
             heatmap_options = heatmap_options.push(radius_label).push(radius_slider);
         }
+        let desaturate_label = Row::new().spacing(10).push(Text::new(&format!("Desaturate level overview: {:.0}%", self.desaturate)));
+        let desaturate_slider = Slider::new(&mut self.desaturate_state, 0.0..=100.0, self.desaturate, Message::DesaturateChanged).style(self.theme);
+        heatmap_options = heatmap_options.push(desaturate_label).push(desaturate_slider);
         let use_sentry_position_checkbox =
             Checkbox::new(self.use_sentry_position, "Use sentry position for sentry kills", Message::UseSentryPositionCheckboxToggled).style(self.theme);
         heatmap_options = heatmap_options.push(use_sentry_position_checkbox);
@@ -644,6 +652,11 @@ impl Application for App {
                 settings_pane.radius = radius;
                 self.try_generate_heatmap();
             }
+            Message::DesaturateChanged(desaturate) => {
+                let settings_pane = self.get_settings_pane_mut();
+                settings_pane.desaturate = desaturate;
+                self.try_generate_heatmap();
+            }
             Message::ProcessDemosDone(mut timed_result) => {
                 let mut demo_count = 0;
                 let mut death_count = 0;
@@ -893,11 +906,11 @@ impl App {
     }
     fn try_generate_heatmap(&mut self) {
         let preview_pane = self.get_preview_pane();
+        let settings_pane = self.get_settings_pane();
         let image = match &preview_pane.heatmap_image {
-            Some(image) => image.image.clone(),
+            Some(image) => apply_image_transformations(&image.image, settings_pane.desaturate),
             None => return,
         };
-        let settings_pane = self.get_settings_pane();
         if let (Some(pos_x), Some(pos_y), Some(scale)) = (settings_pane.x_pos, settings_pane.y_pos, settings_pane.scale) {
             let coords_type = settings_pane.coords_type;
             let heatmap_type = settings_pane.heatmap_type;
@@ -935,8 +948,41 @@ impl App {
                 }
                 _ => unreachable!(),
             };
+        } else {
+            // We can't generate the heatmap yet but we should still apply the desaturation on the level overview
+            match &mut self.get_preview_pane_mut().heatmap_image {
+                Some(heatmap_image) => {
+                    heatmap_image.handle = image_to_handle(&image);
+                    heatmap_image.image_with_heatmap_overlay = image;
+                }
+                _ => unreachable!(),
+            };
         }
     }
+}
+
+// just desaturate for now
+fn apply_image_transformations(image: &ImageBuffer<Rgb<u8>, Vec<u8>>, desaturate: f32) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+    let desaturate = desaturate / 100.0;
+    let mut output_image = ImageBuffer::new(image.width(), image.height());
+
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let Rgb(data) = *pixel;
+
+        // Convert the pixel to grayscale
+        let gray_value = (0.3 * data[0] as f32 + 0.59 * data[1] as f32 + 0.11 * data[2] as f32) as u8;
+
+        // Linearly interpolate between the original pixel and the grayscale value
+        let new_pixel = Rgb([
+            ((1.0 - desaturate) * data[0] as f32 + desaturate * gray_value as f32) as u8,
+            ((1.0 - desaturate) * data[1] as f32 + desaturate * gray_value as f32) as u8,
+            ((1.0 - desaturate) * data[2] as f32 + desaturate * gray_value as f32) as u8,
+        ]);
+
+        output_image.put_pixel(x, y, new_pixel);
+    }
+
+    output_image
 }
 
 fn image_to_handle(image: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Handle {

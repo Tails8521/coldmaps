@@ -49,6 +49,13 @@ pub fn main() -> Result<(), iced::Error> {
         if arg == "--demoplayer" {
             demo_player::run().unwrap();
             return Ok(());
+        } else if arg == "--chat" {
+            let paths = args[2..].iter().map(|arg| PathBuf::from(arg)).collect::<Vec<_>>();
+            let outputs = process_demos(paths);
+            for (path, chat) in outputs.iter().filter_map(|output| output.heatmap_analysis.as_ref().map(|a| (output.path.clone(), chat::format_chat_messages(a)))) {
+                println!("Chat of: {}\n{}\n", path.to_string_lossy(), chat.join("\n"));
+            }
+            return Ok(());
         }
     }
     App::run(Settings {

@@ -3,13 +3,16 @@
 A tool for creating heatmaps from Team Fortress 2 demos
 ![Screenshot](/screenshot.png)
 
+# Tutorial video (click on the thumbnail to play)
+[![Video thumbnail](https://i3.ytimg.com/vi/p-pbByda4Io/maxresdefault.jpg)](https://www.youtube.com/watch?v=p-pbByda4Io)
+
 # Download
 
 Check the [releases page](https://github.com/Tails8521/coldmaps/releases) and download the latest version
 
 # How to use
 
-1: Create a level overview screenshot, [this video](https://www.youtube.com/watch?v=isYxpHz4GWQ) explains how to make one, the program isn't picky with file formats for screenshots: png, jpg or even tga are supported  
+1: Create a level overview screenshot, if you don't know how to, the video tutorial linked above explains it, the program isn't picky with file formats for screenshots: png, jpg or even tga are supported  
 2: Take note of the coordinates of the camera at the moment you took the screenshot (x, y and the cl_leveloverview zoom level), there are two different ways: cl_showpos 1 or the values displayed in the console when you use cl_leveloverview, note that these coordinates are different but the program can understand either of them.  
 Tip: You can use setpos \<x> \<y> \<z> to position yourself accurately  
 3: Drag and drop the screenshot over the program's window  
